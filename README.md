@@ -1,54 +1,76 @@
 # Sayuri Yukishiro
 
-Current release: v0.1.1
-Development target: v0.2.0
-Core foundation: v0.1.0
+**Текущий релиз:** v0.2.0  
+**Системное ядро:** v0.2.0  
+**Следующая разработка:** v0.3.0
 
-Sayuri Yukishiro is a modular personal AI platform.
+Sayuri Yukishiro — модульная персональная AI-платформа.
 
-## Mandatory update protocol
+## Системное ядро v0.2.0
 
-Every change is governed by AGENTS.md, docs/UPDATE_PROTOCOL.md, UPDATE_IDS.json, UPDATE_LOG.md and PROJECT_STATE.json.
+В проекте работают:
 
-Required sequence:
+- реестр служб и управляемый жизненный цикл;
+- единая конфигурация;
+- структурированное журналирование;
+- внутренняя шина событий;
+- диспетчер фоновых задач;
+- контроль состояния служб;
+- долговечные контрольные точки;
+- восстановление незавершённой работы после перезапуска;
+- ограниченный CoreAPI для будущих модулей;
+- SQLite schema v2 для служб, задач и контрольных точек.
+
+Подробности: docs/SYSTEM_CORE.md.
+
+## Обязательный протокол обновлений
+
+Каждое изменение регулируется файлами:
+
+- AGENTS.md
+- docs/UPDATE_PROTOCOL.md
+- UPDATE_IDS.json
+- UPDATE_LOG.md
+- PROJECT_STATE.json
+
+Последовательность:
 
 task -> ID -> change -> check -> version -> journal -> commit -> next_action
 
-CI validates the protocol with:
+Проверка протокола:
 
 python scripts/validate_update_protocol.py
 
-## Launch
+## Запуск
 
-Run Sayuri-Yukishiro.bat.
+Запустите Sayuri-Yukishiro.bat.
 
-The launcher resolves the project directory dynamically, finds Python, checks for safe fast-forward updates, runs diagnostics, starts the local core at http://127.0.0.1:8765, opens the site and remains available in the Windows notification area.
+BAT определяет текущий путь проекта без привязки к букве диска, выполняет безопасную проверку обновлений, диагностику, запускает локальный сервер и оставляет Sayuri в системном трее Windows.
 
-## Storage model
+Локальный адрес:
 
-- data/core/sayuri_yukishiro.db — central core registry.
-- data/modules/<module_id>.db — isolated storage owned by each module.
-- data/logs/ — runtime logs.
-- data/cache/ — disposable cache.
+http://127.0.0.1:8765
 
-## Update safety
+## Системные API
 
-Automatic Git updates are conservative: local changes block automatic update, only origin/main is fetched, only fast-forward is accepted and divergent history is never overwritten automatically.
+- GET /api/health
+- GET /api/system
+- GET /api/core
+- GET /api/core/jobs
+- GET /api/core/recovery
+- GET /api/modules
 
-## Current foundation
+## Хранилище
 
-- Portable launcher
-- Windows tray host
-- Diagnostics
-- Local web shell
-- SQLite core database
-- Per-module SQLite databases
-- Module registry
-- Audit/event/job primitives
-- Safe Git update check
-- Machine-readable project state
-- Mandatory version/change/bug/fix/feature/improvement/architecture IDs
+- data/core/sayuri_yukishiro.db — системная база ядра.
+- data/modules/<module_id>.db — отдельные базы будущих модулей.
+- data/logs/ — журналы.
+- data/cache/ — временные данные.
 
-## Next release after governance
+## Безопасность обновления
 
-The next functional release is v0.2.0 — Module Runtime & Lifecycle, because the mandatory versioning policy classifies new functionality as a MINOR release.
+Автообновление Git работает только при чистом рабочем дереве и только fast-forward. Принудительный reset и уничтожение локальных изменений не используются.
+
+## Следующий этап
+
+v0.3.0 — система модулей и их жизненный цикл: manifest, обнаружение, зависимости, разрешения, миграции, health-check и управляемый запуск/остановка.
