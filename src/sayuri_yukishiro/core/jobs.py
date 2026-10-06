@@ -12,7 +12,7 @@ from .service import ManagedService
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 @dataclass
@@ -32,10 +32,16 @@ class JobStatus:
 class JobManager(ManagedService):
     name = "job_manager"
 
-    def __init__(self, db: CoreDatabase, max_workers: int = 4) -> None:
+    def __init__(
+        self,
+        db: CoreDatabase,
+        max_workers: int = 4,
+        max_history: int = 500,
+    ) -> None:
         super().__init__()
         self._db = db
         self._max_workers = max(1, int(max_workers))
+        self._max_history = max(1, int(max_history))
         self._executor: ThreadPoolExecutor | None = None
         self._jobs: dict[str, JobStatus] = {}
         self._futures: dict[str, Future[Any]] = {}
@@ -52,6 +58,9 @@ class JobManager(ManagedService):
         if self._executor is not None:
             self._executor.shutdown(wait=True, cancel_futures=False)
             self._executor = None
+        with self._jobs_lock:
+            self._futures.clear()
+            self._prune_locked()
 
     def submit(
         self,
@@ -74,6 +83,7 @@ class JobManager(ManagedService):
         future = executor.submit(self._run_job, job_id, func, args, kwargs)
         with self._jobs_lock:
             self._futures[job_id] = future
+        future.add_done_callback(lambda _future, jid=job_id: self._on_future_done(jid))
         return job_id
 
     def _run_job(
@@ -108,10 +118,37 @@ class JobManager(ManagedService):
             item.error = error
         self._db.update_core_job(job_id, status, result=result, error=error)
 
+    def _on_future_done(self, job_id: str) -> None:
+        with self._jobs_lock:
+            self._futures.pop(job_id, None)
+            self._prune_locked()
+
+    def _prune_locked(self) -> None:
+        if len(self._jobs) <= self._max_history:
+            return
+        terminal = [
+            job_id
+            for job_id, item in self._jobs.items()
+            if item.status in {"completed", "failed"}
+        ]
+        while len(self._jobs) > self._max_history and terminal:
+            self._jobs.pop(terminal.pop(0), None)
+
     def wait(self, job_id: str, timeout: float | None = None) -> Any:
         with self._jobs_lock:
-            future = self._futures[job_id]
-        return future.result(timeout=timeout)
+            future = self._futures.get(job_id)
+        if future is not None:
+            return future.result(timeout=timeout)
+
+        with self._jobs_lock:
+            item = self._jobs.get(job_id)
+            if item is None:
+                raise KeyError(job_id)
+            if item.status == "completed":
+                return item.result
+            if item.status == "failed":
+                raise RuntimeError(item.error or f"Job failed: {job_id}")
+            raise RuntimeError(f"Job is not waitable: {job_id} ({item.status})")
 
     def get(self, job_id: str) -> dict[str, Any]:
         with self._jobs_lock:

@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = PROJECT_ROOT / "data"
+
+
+def _runtime_data_dir() -> Path:
+    raw = os.environ.get("SAYURI_DATA_DIR", "").strip()
+    if not raw:
+        return PROJECT_ROOT / "data"
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = PROJECT_ROOT / candidate
+    return candidate.resolve(strict=False)
+
+
+DATA_DIR = _runtime_data_dir()
 CORE_DATA_DIR = DATA_DIR / "core"
 MODULE_DATA_DIR = DATA_DIR / "modules"
 LOG_DIR = DATA_DIR / "logs"

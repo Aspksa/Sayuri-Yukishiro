@@ -15,6 +15,15 @@ $Root = (Resolve-Path $Root).Path
 $SourceRoot = Join-Path $Root "src"
 $env:PYTHONPATH = $SourceRoot
 $script:SayuriExitCode = 0
+$script:ShutdownToken = ""
+
+$VersionFile = Join-Path $Root "VERSION"
+if (Test-Path $VersionFile) {
+    $ProjectVersion = (Get-Content -Raw $VersionFile).Trim()
+}
+else {
+    $ProjectVersion = "unknown"
+}
 
 function Resolve-SayuriPython {
     $portable = Join-Path $Root "runtime\python\python.exe"
@@ -51,10 +60,11 @@ function Invoke-Sayuri {
 }
 
 function Start-SayuriCore {
-    $allArgs = @($Python.Prefix) + @("-m", "sayuri_yukishiro.main", "--serve")
+    $script:ShutdownToken = [guid]::NewGuid().ToString("N")
+    $processArgs = @($Python.Prefix) + @("-m", "sayuri_yukishiro.main", "--serve")
     $quoted = @()
-    foreach ($arg in $allArgs) {
-        $quoted += '"' + ($arg -replace '"', '\"') + '"'
+    foreach ($item in $processArgs) {
+        $quoted += '"' + ($item -replace '"', '\"') + '"'
     }
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -65,6 +75,7 @@ function Start-SayuriCore {
     $psi.CreateNoWindow = $true
     $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
     $psi.EnvironmentVariables["PYTHONPATH"] = $SourceRoot
+    $psi.EnvironmentVariables["SAYURI_SHUTDOWN_TOKEN"] = $script:ShutdownToken
 
     return [System.Diagnostics.Process]::Start($psi)
 }
@@ -88,12 +99,35 @@ function Test-SayuriHealth {
     }
 }
 
-function Run-Preflight {
-    $args = @("--preflight")
-    if ($NoUpdate) {
-        $args += "--no-update"
+function Stop-SayuriCore {
+    if (-not $script:OwnsCore -or -not $script:CoreProcess -or $script:CoreProcess.HasExited) {
+        return
     }
-    Invoke-Sayuri -Arguments $args
+
+    $stopped = $false
+    if (-not [string]::IsNullOrWhiteSpace($script:ShutdownToken)) {
+        try {
+            $headers = @{ "X-Sayuri-Shutdown-Token" = $script:ShutdownToken }
+            Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$url/api/shutdown" -Headers $headers -TimeoutSec 2 | Out-Null
+            $stopped = $script:CoreProcess.WaitForExit(5000)
+        }
+        catch {
+            $stopped = $false
+        }
+    }
+
+    if (-not $stopped -and -not $script:CoreProcess.HasExited) {
+        $script:CoreProcess.Kill()
+        $script:CoreProcess.WaitForExit(3000) | Out-Null
+    }
+}
+
+function Run-Preflight {
+    $cliArgs = @("--preflight")
+    if ($NoUpdate) {
+        $cliArgs += "--no-update"
+    }
+    Invoke-Sayuri -Arguments $cliArgs
 }
 
 if ($PreflightOnly) {
@@ -141,9 +175,7 @@ if (-not (Test-SayuriHealth)) {
             "OK",
             "Error"
         ) | Out-Null
-        if ($script:OwnsCore -and $script:CoreProcess -and -not $script:CoreProcess.HasExited) {
-            $script:CoreProcess.Kill()
-        }
+        Stop-SayuriCore
         exit 1
     }
 }
@@ -152,7 +184,7 @@ Start-Process $url
 
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $notify.Icon = [System.Drawing.SystemIcons]::Application
-$notify.Text = "Sayuri Yukishiro v0.1.0"
+$notify.Text = "Sayuri Yukishiro v$ProjectVersion"
 $notify.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -171,15 +203,14 @@ $openAction = {
 }
 
 $diagnosticsAction = {
-    $args = @(
+    $cliArgs = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-File", (Join-Path $Root "scripts\launcher.ps1"),
-        "-Root", $Root,
         "-PreflightOnly",
         "-NoUpdate"
     )
-    Start-Process "powershell.exe" -ArgumentList $args
+    Start-Process "powershell.exe" -ArgumentList $cliArgs
 }
 
 $restartAction = {
@@ -187,23 +218,36 @@ $restartAction = {
         return
     }
 
-    if ($script:CoreProcess -and -not $script:CoreProcess.HasExited) {
-        $script:CoreProcess.Kill()
-        $script:CoreProcess.WaitForExit(5000) | Out-Null
-    }
-
+    Stop-SayuriCore
     $script:CoreProcess = Start-SayuriCore
+
+    $healthy = $false
     for ($i = 0; $i -lt 30; $i++) {
         Start-Sleep -Milliseconds 250
         if (Test-SayuriHealth) {
-            $notify.ShowBalloonTip(
-                1500,
-                "Sayuri Yukishiro",
-                "Ядро перезапущено.",
-                [System.Windows.Forms.ToolTipIcon]::Info
-            )
+            $healthy = $true
             break
         }
+        if ($script:CoreProcess.HasExited) {
+            break
+        }
+    }
+
+    if ($healthy) {
+        $notify.ShowBalloonTip(
+            1500,
+            "Sayuri Yukishiro",
+            "Ядро перезапущено.",
+            [System.Windows.Forms.ToolTipIcon]::Info
+        )
+    }
+    else {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Sayuri core did not restart. Run diagnostics.",
+            "Sayuri Yukishiro",
+            "OK",
+            "Error"
+        ) | Out-Null
     }
 }
 
@@ -230,8 +274,5 @@ try {
 finally {
     $notify.Visible = $false
     $notify.Dispose()
-    if ($script:OwnsCore -and $script:CoreProcess -and -not $script:CoreProcess.HasExited) {
-        $script:CoreProcess.Kill()
-        $script:CoreProcess.WaitForExit(3000) | Out-Null
-    }
+    Stop-SayuriCore
 }

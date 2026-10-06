@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from ..core.api import CoreAPI
 from ..database import CoreDatabase
+from ..version import COGNITIVE_CORE_VERSION
 from .assessment import CognitiveAssessment
 from .capabilities import (
     CapabilityRegistry,
@@ -27,7 +28,7 @@ from .verification import ResultVerifier
 
 
 class CognitiveCore:
-    VERSION = "0.3.0"
+    VERSION = COGNITIVE_CORE_VERSION
 
     def __init__(
         self,

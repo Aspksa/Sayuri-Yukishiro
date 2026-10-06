@@ -3,13 +3,16 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import secrets
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from urllib.parse import urlparse
 
 from .cognitive.engine import CognitiveCore
 from .core.runtime import SystemCore
 from .paths import WEB_DIR, project_version
+from .version import SERVER_PRODUCT
 
 
 class SayuriHTTPServer(ThreadingHTTPServer):
@@ -21,14 +24,16 @@ class SayuriHTTPServer(ThreadingHTTPServer):
         server_address: tuple[str, int],
         core: SystemCore,
         cognitive: CognitiveCore,
+        shutdown_token: str = "",
     ):
         self.core = core
         self.cognitive = cognitive
+        self.shutdown_token = shutdown_token
         super().__init__(server_address, SayuriHandler)
 
 
 class SayuriHandler(BaseHTTPRequestHandler):
-    server_version = "SayuriYukishiro/0.3.0"
+    server_version = SERVER_PRODUCT
 
     @property
     def app_server(self) -> SayuriHTTPServer:
@@ -111,7 +116,7 @@ class SayuriHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/system":
-            core_status = core.status()
+            core_status = core.status(deep=True)
             cognitive_status = cognitive.status()
             self._json(
                 {
@@ -133,23 +138,58 @@ class SayuriHandler(BaseHTTPRequestHandler):
         relative = "index.html" if path == "/" else path.lstrip("/")
         self._serve_file(relative)
 
+    def do_POST(self) -> None:
+        path = urlparse(self.path).path
+        if path != "/api/shutdown":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+
+        if self.client_address[0] not in {"127.0.0.1", "::1"}:
+            self._json({"status": "forbidden"}, HTTPStatus.FORBIDDEN)
+            return
+
+        expected = self.app_server.shutdown_token
+        supplied = self.headers.get("X-Sayuri-Shutdown-Token", "")
+        if not expected:
+            self._json({"status": "disabled"}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if not supplied or not secrets.compare_digest(supplied, expected):
+            self._json({"status": "forbidden"}, HTTPStatus.FORBIDDEN)
+            return
+
+        self._json({"status": "shutting_down"}, HTTPStatus.OK)
+        Thread(
+            target=self.app_server.shutdown,
+            name="sayuri-shutdown",
+            daemon=True,
+        ).start()
+
     def log_message(self, format: str, *args) -> None:
         return
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     core = SystemCore()
-    core.start()
-    cognitive = CognitiveCore(core.api, core.db)
-    cognitive.start()
-    server = SayuriHTTPServer((host, port), core, cognitive)
-    print(
-        f"Sayuri Yukishiro {project_version()} / system core {core.CORE_VERSION} / "
-        f"cognitive core {cognitive.VERSION} listening on http://{host}:{port}"
-    )
+    cognitive: CognitiveCore | None = None
+    server: SayuriHTTPServer | None = None
     try:
+        core.start()
+        cognitive = CognitiveCore(core.api, core.db)
+        cognitive.start()
+        server = SayuriHTTPServer(
+            (host, port),
+            core,
+            cognitive,
+            shutdown_token=os.environ.get("SAYURI_SHUTDOWN_TOKEN", ""),
+        )
+        print(
+            f"Sayuri Yukishiro {project_version()} / system core {core.CORE_VERSION} / "
+            f"cognitive core {cognitive.VERSION} listening on http://{host}:{port}"
+        )
         server.serve_forever(poll_interval=0.5)
     finally:
-        server.server_close()
-        cognitive.stop()
+        if server is not None:
+            server.server_close()
+        if cognitive is not None:
+            cognitive.stop()
         core.stop()

@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .paths import CORE_DATA_DIR, MODULE_DATA_DIR, ensure_runtime_dirs
+from .storage_policy import sqlite_journal_mode
+from .version import SYSTEM_CORE_VERSION
 
 CORE_DB_PATH = CORE_DATA_DIR / "sayuri_yukishiro.db"
 _SAFE_MODULE_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
@@ -31,8 +33,9 @@ class CoreDatabase:
         conn = sqlite3.connect(self.path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
+        mode = sqlite_journal_mode(self.path)
+        conn.execute(f"PRAGMA journal_mode = {mode}")
+        conn.execute("PRAGMA synchronous = FULL" if mode == "DELETE" else "PRAGMA synchronous = NORMAL")
         return conn
 
     @contextmanager
@@ -127,7 +130,7 @@ class CoreDatabase:
             conn.execute(
                 """
                 INSERT INTO modules(id, name, version, status, db_path, created_at, updated_at)
-                VALUES('core', 'Sayuri Yukishiro Core', '0.2.0', 'active', ?, ?, ?)
+                VALUES('core', 'Sayuri Yukishiro Core', ?, 'active', ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     version=excluded.version,
@@ -135,7 +138,7 @@ class CoreDatabase:
                     db_path=excluded.db_path,
                     updated_at=excluded.updated_at
                 """,
-                (str(self.path), now, now),
+                (SYSTEM_CORE_VERSION, str(self.path), now, now),
             )
 
     def _apply_system_core_schema(self, conn: sqlite3.Connection) -> None:
@@ -504,7 +507,9 @@ def module_connection(module_id: str) -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
+    mode = sqlite_journal_mode(path)
+    conn.execute(f"PRAGMA journal_mode = {mode}")
+    conn.execute("PRAGMA synchronous = FULL" if mode == "DELETE" else "PRAGMA synchronous = NORMAL")
     try:
         yield conn
         conn.commit()

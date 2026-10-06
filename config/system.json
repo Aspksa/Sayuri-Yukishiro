@@ -1,6 +1,7 @@
 {
   "core": {
     "max_workers": 4,
+    "job_history_limit": 500,
     "recovery_enabled": true
   },
   "logging": {

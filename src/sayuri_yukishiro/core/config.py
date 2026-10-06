@@ -11,7 +11,11 @@ from .service import ManagedService
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "core": {"max_workers": 4, "recovery_enabled": True},
+    "core": {
+        "max_workers": 4,
+        "job_history_limit": 500,
+        "recovery_enabled": True,
+    },
     "logging": {"level": "INFO", "max_bytes": 2000000, "backup_count": 3},
 }
 
@@ -35,6 +39,8 @@ class ConfigurationService(ManagedService):
 
         if os.environ.get("SAYURI_CORE_MAX_WORKERS"):
             data["core"]["max_workers"] = int(os.environ["SAYURI_CORE_MAX_WORKERS"])
+        if os.environ.get("SAYURI_JOB_HISTORY_LIMIT"):
+            data["core"]["job_history_limit"] = int(os.environ["SAYURI_JOB_HISTORY_LIMIT"])
         if os.environ.get("SAYURI_RECOVERY_ENABLED"):
             data["core"]["recovery_enabled"] = os.environ["SAYURI_RECOVERY_ENABLED"].strip().lower() not in {"0","false","no","off"}
         if os.environ.get("SAYURI_LOG_LEVEL"):

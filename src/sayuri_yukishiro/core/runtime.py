@@ -6,6 +6,7 @@ from typing import Any
 
 from ..database import CoreDatabase
 from ..paths import LOG_DIR, PROJECT_ROOT, project_version
+from ..version import SYSTEM_CORE_VERSION
 from .api import CoreAPI
 from .checkpoints import CheckpointService
 from .config import ConfigurationService
@@ -18,7 +19,7 @@ from .service import ServiceRegistry
 
 
 class SystemCore:
-    CORE_VERSION = "0.2.0"
+    CORE_VERSION = SYSTEM_CORE_VERSION
 
     def __init__(
         self,
@@ -44,6 +45,7 @@ class SystemCore:
         self.jobs = JobManager(
             self.db,
             max_workers=int(self.config.get("core.max_workers", 4)),
+            max_history=int(self.config.get("core.job_history_limit", 500)),
         )
         self.checkpoints = CheckpointService(self.db)
         self.recovery = RecoveryService(
@@ -97,7 +99,7 @@ class SystemCore:
         with self._lock:
             return self._running
 
-    def status(self) -> dict[str, Any]:
+    def status(self, *, deep: bool = False) -> dict[str, Any]:
         health = self.health.snapshot()
         return {
             "project": "Sayuri Yukishiro",
@@ -106,5 +108,5 @@ class SystemCore:
             "running": self.running,
             "health": health,
             "recoverable_tasks": len(self.recovery.pending()),
-            "database_check": self.db.quick_check(),
+            "database_check": self.db.quick_check() if deep else "not_checked",
         }
