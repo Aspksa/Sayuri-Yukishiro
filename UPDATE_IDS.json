@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
   "last_assigned": {
-    "CHG": 102,
+    "CHG": 104,
     "FEAT": 31,
-    "BUG": 30,
-    "FIX": 30,
+    "BUG": 31,
+    "FIX": 31,
     "IMP": 4,
     "ARCH": 7
   },
   "next": {
-    "CHG": "CHG-0103",
+    "CHG": "CHG-0105",
     "FEAT": "FEAT-0032",
-    "BUG": "BUG-0031",
-    "FIX": "FIX-0031",
+    "BUG": "BUG-0032",
+    "FIX": "FIX-0032",
     "IMP": "IMP-0005",
     "ARCH": "ARCH-0008"
   },
@@ -91,7 +91,11 @@
       "CHG-0101",
       "BUG-0030",
       "CHG-0102",
-      "FIX-0030"
+      "FIX-0030",
+      "CHG-0103",
+      "BUG-0031",
+      "CHG-0104",
+      "FIX-0031"
     ]
   }
 }
