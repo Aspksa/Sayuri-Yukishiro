@@ -9,6 +9,17 @@ from .paths import project_version
 from .server import serve
 
 
+def _configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def _port() -> int:
     raw = os.environ.get("SAYURI_PORT", "8765")
     try:
@@ -21,6 +32,7 @@ def _port() -> int:
 
 
 def preflight(no_update: bool = False) -> int:
+    _configure_stdio()
     print(f"Sayuri Yukishiro v{project_version()}")
     print()
     print(
@@ -58,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    _configure_stdio()
     args = build_parser().parse_args()
 
     if args.preflight:
