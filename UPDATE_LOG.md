@@ -218,3 +218,41 @@ Commit:
 Следующий шаг:
 
 next_action: v0.4.0 — Система модулей и их жизненный цикл: manifests, discovery, dependency graph, permissions, migrations, health-check, controlled startup/shutdown и регистрация способностей модулей в когнитивном ядре.
+
+
+---
+
+## v0.4.0
+
+Дата: 2026-10-07
+
+Статус: in_progress
+
+Изменения:
+
+- CHG-0067 / ARCH-0007 — обновление проекта переносится в системное ядро как привилегированная инфраструктурная служба, а не модуль.
+- CHG-0068 / FEAT-0026 — добавляется управляемая служба UpdateService: состояние, проверка upstream, доступная версия, список изменений и журнал операции.
+- CHG-0069 / FEAT-0027 — добавляется долговечное состояние обновлений, staging/backup metadata и журнал обновления вне изменяемых файлов проекта.
+- CHG-0070 / FEAT-0028 — добавляется API ядра GET /api/update/status, POST /api/update/check и POST /api/update/apply с локальной защитой управляющим токеном.
+- CHG-0071 / FEAT-0029 — добавляется отдельный update-helper: ожидание мягкой остановки, backup, fast-forward apply, post-update verification, rollback и restart.
+- CHG-0072 / FEAT-0030 — в системную web-оболочку добавляется встроенная страница «Обновления проекта» с проверкой, применением, прогрессом и журналом.
+- CHG-0073 / FEAT-0031 — в Windows tray добавляется пункт «Проверить обновления», использующий тот же API/страницу.
+- CHG-0074 / IMP-0004 — старое автоматическое изменение репозитория из preflight отключается; обновления имеют единый owner — UpdateService.
+
+Проверки:
+
+- tests: PENDING
+- lint: NOT_CONFIGURED
+- type-check: NOT_CONFIGURED
+- smoke-test: PENDING
+- protocol-validation: PENDING
+- python-compile: PENDING
+- powershell-syntax: PENDING
+
+Commit:
+
+PENDING_AFTER_IMPLEMENTATION_CHECKS
+
+Следующий шаг:
+
+next_action: реализовать «Обновления проекта» как UpdateService системного ядра, helper-процесс, API, встроенную страницу, tray-интеграцию и regression tests.
