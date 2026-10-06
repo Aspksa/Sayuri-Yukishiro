@@ -30,7 +30,7 @@ class SayuriHTTPServer(ThreadingHTTPServer):
         self.core = core
         self.cognitive = cognitive
         self.shutdown_token = shutdown_token
-        self.control_token = shutdown_token or secrets.token_urlsafe(32)
+        self.control_token = secrets.token_urlsafe(32)
         super().__init__(server_address, SayuriHandler)
 
 
@@ -53,8 +53,22 @@ class SayuriHandler(BaseHTTPRequestHandler):
     def _is_loopback(self) -> bool:
         return self.client_address[0] in {"127.0.0.1", "::1"}
 
+    def _host_is_loopback(self) -> bool:
+        raw = self.headers.get("Host", "").strip().lower()
+        if not raw:
+            return False
+        if raw.startswith("["):
+            closing = raw.find("]")
+            host = raw[: closing + 1] if closing >= 0 else raw
+        else:
+            host = raw.split(":", 1)[0]
+        return host in {"127.0.0.1", "localhost", "[::1]"}
+
+    def _local_shell_allowed(self) -> bool:
+        return self._is_loopback() and self._host_is_loopback()
+
     def _control_allowed(self) -> bool:
-        if not self._is_loopback():
+        if not self._local_shell_allowed():
             return False
         supplied = self.headers.get("X-Sayuri-Control-Token", "")
         expected = self.app_server.control_token
@@ -108,7 +122,7 @@ class SayuriHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/session/control-token":
-            if not self._is_loopback():
+            if not self._local_shell_allowed():
                 self._json(
                     {"status": "forbidden"},
                     HTTPStatus.FORBIDDEN,
@@ -118,6 +132,12 @@ class SayuriHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/update/status":
+            if not self._local_shell_allowed():
+                self._json(
+                    {"status": "forbidden"},
+                    HTTPStatus.FORBIDDEN,
+                )
+                return
             self._json(core.update.status())
             return
 
@@ -238,7 +258,7 @@ class SayuriHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/shutdown":
-            if not self._is_loopback():
+            if not self._local_shell_allowed():
                 self._json(
                     {"status": "forbidden"},
                     HTTPStatus.FORBIDDEN,

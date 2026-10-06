@@ -40,6 +40,7 @@ class UpdateServiceTests(unittest.TestCase):
             events,
             root=root,
             update_dir=root / "update",
+            data_dir=root / "runtime-data",
         )
         service.start()
         return db, events, jobs, service
@@ -139,6 +140,11 @@ class UpdateServiceTests(unittest.TestCase):
                 self.assertEqual(plan["before_sha"], "a" * 40)
                 self.assertEqual(plan["target_sha"], "b" * 40)
                 self.assertEqual(plan["upstream"], "origin/main")
+                self.assertEqual(
+                    Path(plan["data_dir"]),
+                    root / "runtime-data",
+                )
+                self.assertIn("db_backup_dir", plan)
                 self.assertEqual(result["phase"], "waiting_for_shutdown")
                 self.assertEqual(result["helper_pid"], 4242)
             finally:
@@ -178,7 +184,16 @@ class UpdateServiceTests(unittest.TestCase):
                     timeout=2,
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(payload["token"], "test-secret")
+                self.assertTrue(payload["token"])
+                self.assertNotEqual(payload["token"], "test-secret")
+
+                bad_host = urllib.request.Request(
+                    f"http://{host}:{port}/api/session/control-token",
+                    headers={"Host": "evil.example"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as host_ctx:
+                    urllib.request.urlopen(bad_host, timeout=2)
+                self.assertEqual(host_ctx.exception.code, 403)
 
                 request = urllib.request.Request(
                     f"http://{host}:{port}/api/update/check",
@@ -239,8 +254,10 @@ class UpdateServiceTests(unittest.TestCase):
             plan = {
                 "schema_version": 1,
                 "root": str(root),
+                "data_dir": str(base / "runtime-data"),
                 "state_path": str(state_file),
                 "backup_path": str(control / "backup.zip"),
+                "db_backup_dir": str(control / "db-backup"),
                 "parent_pid": 0,
                 "python_executable": sys.executable,
                 "port": 8765,
@@ -256,9 +273,28 @@ class UpdateServiceTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            runtime_data = base / "runtime-data"
+            runtime_data.mkdir()
+            db_path = runtime_data / "state.db"
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute("CREATE TABLE sample(value TEXT NOT NULL)")
+                conn.execute("INSERT INTO sample(value) VALUES('old')")
+                conn.commit()
+            finally:
+                conn.close()
+
             helper = UpdateHelper(plan_file)
             helper.backup()
             helper.apply()
+
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute("UPDATE sample SET value='new'")
+                conn.commit()
+            finally:
+                conn.close()
             self.assertTrue((control / "backup.zip").is_file())
             self.assertEqual(
                 (root / "payload.txt").read_text(encoding="utf-8"),
@@ -291,10 +327,20 @@ class UpdateServiceTests(unittest.TestCase):
                 (root / "payload.txt").read_text(encoding="utf-8"),
                 "old\n",
             )
+            state = load_update_state(state_file)
+            self.assertEqual(state["phase"], "rolled_back")
             self.assertEqual(
-                load_update_state(state_file)["phase"],
-                "rolled_back",
+                state["rollback"]["databases_restored"],
+                1,
             )
+            conn = sqlite3.connect(db_path)
+            try:
+                value = conn.execute(
+                    "SELECT value FROM sample"
+                ).fetchone()[0]
+            finally:
+                conn.close()
+            self.assertEqual(value, "old")
 
     def test_helper_refuses_destructive_rollback_if_worktree_changed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -363,6 +409,147 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(self._git(root, "rev-parse", "HEAD"), target)
             self.assertTrue((root / "local-note.txt").is_file())
             self.assertTrue((control / "backup.zip").is_file())
+
+    def test_stale_busy_state_recovers_to_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            update_dir = root / "update"
+            state = default_update_state()
+            state.update(
+                {
+                    "phase": "applying",
+                    "helper_pid": 424242,
+                    "can_apply": False,
+                }
+            )
+            save_update_state(state, update_dir / "status.json")
+
+            db = CoreDatabase(root / "core.db")
+            db.initialize()
+            events = EventBus(db)
+            jobs = JobManager(db, max_workers=1)
+            events.start()
+            jobs.start()
+            service = UpdateService(
+                jobs,
+                events,
+                root=root,
+                update_dir=update_dir,
+                data_dir=root / "runtime-data",
+            )
+            try:
+                with patch(
+                    "sayuri_yukishiro.core.update_service._process_alive",
+                    return_value=False,
+                ):
+                    service.start()
+                restored = service.status()
+                self.assertEqual(restored["phase"], "failed")
+                self.assertEqual(
+                    restored["rollback"]["status"],
+                    "interrupted",
+                )
+            finally:
+                service.stop()
+                jobs.stop()
+                events.stop()
+
+    def test_restart_terminates_unhealthy_new_process_before_rollback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "repo"
+            root.mkdir()
+            control = base / "update"
+            control.mkdir()
+            state_file = control / "status.json"
+            save_update_state(default_update_state(), state_file)
+            plan_file = control / "plan.json"
+            plan_file.write_text(
+                json.dumps(
+                    {
+                        "root": str(root),
+                        "data_dir": str(base / "runtime-data"),
+                        "state_path": str(state_file),
+                        "backup_path": str(control / "backup.zip"),
+                        "db_backup_dir": str(control / "db-backup"),
+                        "parent_pid": 0,
+                        "python_executable": sys.executable,
+                        "port": 8765,
+                        "shutdown_token": "shutdown-secret",
+                        "before_sha": "a" * 40,
+                        "target_sha": "b" * 40,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            helper = UpdateHelper(plan_file)
+            process = MagicMock()
+            process.pid = 4444
+            with (
+                patch.object(helper, "_start_core", return_value=process),
+                patch.object(
+                    helper,
+                    "_wait_health",
+                    side_effect=TimeoutError("not healthy"),
+                ),
+                patch.object(helper, "_terminate_process") as terminate,
+            ):
+                with self.assertRaises(TimeoutError):
+                    helper.restart()
+            terminate.assert_called_once_with(process)
+
+    def test_verification_uses_isolated_runtime_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "repo"
+            root.mkdir()
+            (root / "scripts").mkdir()
+            state_file = base / "update" / "status.json"
+            state_file.parent.mkdir()
+            save_update_state(default_update_state(), state_file)
+            plan_file = state_file.parent / "plan.json"
+            production = base / "production-data"
+            plan_file.write_text(
+                json.dumps(
+                    {
+                        "root": str(root),
+                        "data_dir": str(production),
+                        "state_path": str(state_file),
+                        "backup_path": str(base / "backup.zip"),
+                        "db_backup_dir": str(base / "db-backup"),
+                        "parent_pid": 0,
+                        "python_executable": sys.executable,
+                        "port": 8765,
+                        "shutdown_token": "shutdown-secret",
+                        "before_sha": "a" * 40,
+                        "target_sha": "b" * 40,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            helper = UpdateHelper(plan_file)
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(kwargs["env"].copy())
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch(
+                "sayuri_yukishiro.update_helper.subprocess.run",
+                side_effect=fake_run,
+            ):
+                helper.verify()
+
+            self.assertTrue(calls)
+            for env in calls:
+                self.assertNotEqual(
+                    Path(env["SAYURI_DATA_DIR"]),
+                    production,
+                )
+                self.assertEqual(
+                    Path(env["SAYURI_DATA_DIR"]),
+                    helper.verify_data_dir,
+                )
 
     def test_update_ui_is_part_of_system_shell(self) -> None:
         from sayuri_yukishiro.paths import PROJECT_ROOT

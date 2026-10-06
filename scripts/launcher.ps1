@@ -93,7 +93,11 @@ $url = "http://127.0.0.1:$port"
 
 function Get-SayuriHealth {
     try {
-        return Invoke-RestMethod -Method Get -Uri "$url/api/health" -TimeoutSec 1
+        $health = Invoke-RestMethod -Method Get -Uri "$url/api/health" -TimeoutSec 1
+        if ($null -eq $health -or $health.project -ne "Sayuri Yukishiro") {
+            return $null
+        }
+        return $health
     }
     catch {
         return $null
@@ -106,6 +110,9 @@ function Test-SayuriHealth {
 }
 
 function Get-SayuriControlToken {
+    if ($null -eq (Get-SayuriHealth)) {
+        return ""
+    }
     try {
         $response = Invoke-RestMethod -Method Get -Uri "$url/api/session/control-token" -TimeoutSec 2
         return [string]$response.token
@@ -116,6 +123,9 @@ function Get-SayuriControlToken {
 }
 
 function Get-SayuriUpdateStatus {
+    if ($null -eq (Get-SayuriHealth)) {
+        return $null
+    }
     try {
         return Invoke-RestMethod -Method Get -Uri "$url/api/update/status" -TimeoutSec 2
     }

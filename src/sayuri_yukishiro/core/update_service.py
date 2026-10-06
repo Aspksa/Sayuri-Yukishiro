@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import subprocess
@@ -10,13 +11,11 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from ..paths import PROJECT_ROOT, UPDATE_DIR, project_version
+from ..paths import DATA_DIR, PROJECT_ROOT, UPDATE_DIR, project_version
 from ..update_state import (
     append_update_log,
     load_update_state,
-    plan_path,
     save_update_state,
-    state_path,
     utc_now,
 )
 from ..updater import UpdateInspection, inspect_update
@@ -37,6 +36,29 @@ _BUSY_PHASES = {
 }
 
 
+def _process_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            handle = ctypes.windll.kernel32.OpenProcess(
+                0x1000,
+                False,
+                pid,
+            )
+        except Exception:
+            return False
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
 class UpdateService(ManagedService):
     name = "update_service"
 
@@ -47,6 +69,7 @@ class UpdateService(ManagedService):
         *,
         root: Path = PROJECT_ROOT,
         update_dir: Path = UPDATE_DIR,
+        data_dir: Path = DATA_DIR,
         port: int = 8765,
     ) -> None:
         super().__init__()
@@ -54,6 +77,7 @@ class UpdateService(ManagedService):
         self._events = events
         self._root = root
         self._update_dir = update_dir
+        self._data_dir = data_dir
         self._state_path = update_dir / "status.json"
         self._plan_path = update_dir / "apply-plan.json"
         self._port = port
@@ -63,15 +87,38 @@ class UpdateService(ManagedService):
         self._update_dir.mkdir(parents=True, exist_ok=True)
         state = load_update_state(self._state_path)
         state["current_version"] = project_version()
-        if state.get("phase") == "checking":
-            state["phase"] = "idle"
-            state["progress"] = 0
-            state["message"] = "Предыдущая проверка обновлений была прервана."
-            state = append_update_log(
-                state,
-                "Проверка обновлений была прервана перезапуском.",
-                level="warning",
-            )
+
+        phase = str(state.get("phase") or "idle")
+        if phase in _BUSY_PHASES:
+            helper_pid = int(state.get("helper_pid") or 0)
+            if helper_pid > 0 and _process_alive(helper_pid):
+                state["message"] = (
+                    "Внешний update-helper продолжает операцию; "
+                    "новая проверка временно заблокирована."
+                )
+                state = append_update_log(
+                    state,
+                    f"Найден активный update-helper PID {helper_pid}.",
+                )
+            else:
+                state["phase"] = "failed"
+                state["progress"] = 100
+                state["can_apply"] = False
+                state["helper_pid"] = None
+                state["message"] = (
+                    "Предыдущая операция обновления была прервана. "
+                    "Запустите проверку обновлений заново."
+                )
+                state["rollback"] = {
+                    "status": "interrupted",
+                    "recoverable": True,
+                }
+                state = append_update_log(
+                    state,
+                    state["message"],
+                    level="warning",
+                )
+
         save_update_state(state, self._state_path)
 
     def status(self) -> dict[str, Any]:
@@ -91,6 +138,7 @@ class UpdateService(ManagedService):
             state["progress"] = 5
             state["message"] = "Проверяю доступные обновления…"
             state["can_apply"] = False
+            state["helper_pid"] = None
             state = append_update_log(state, "Запущена проверка обновлений.")
             save_update_state(state, self._state_path)
 
@@ -165,6 +213,7 @@ class UpdateService(ManagedService):
                     "target_sha": inspection.target_sha,
                     "changes": list(inspection.changes),
                     "last_check": utc_now(),
+                    "helper_pid": None,
                 }
             )
             if inspection.update_available:
@@ -194,7 +243,9 @@ class UpdateService(ManagedService):
             if state.get("phase") != "available":
                 raise RuntimeError("No checked update is ready to apply.")
             if not state.get("can_apply"):
-                raise RuntimeError("Update is blocked by the current repository state.")
+                raise RuntimeError(
+                    "Update is blocked by the current repository state."
+                )
 
         recheck = inspect_update(fetch=False, root=self._root)
         if not recheck.can_apply:
@@ -214,11 +265,16 @@ class UpdateService(ManagedService):
             backup_path = self._update_dir / (
                 f"backup-{stamp}-{str(recheck.current_sha)[:12]}.zip"
             )
+            db_backup_dir = self._update_dir / (
+                f"db-backup-{stamp}-{str(recheck.current_sha)[:12]}"
+            )
             plan = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "root": str(self._root),
+                "data_dir": str(self._data_dir),
                 "state_path": str(self._state_path),
                 "backup_path": str(backup_path),
+                "db_backup_dir": str(db_backup_dir),
                 "parent_pid": os.getpid(),
                 "python_executable": sys.executable,
                 "port": self._port,
@@ -249,6 +305,7 @@ class UpdateService(ManagedService):
             state["message"] = "План обновления подготовлен."
             state["can_apply"] = False
             state["backup_path"] = str(backup_path)
+            state["database_backup_path"] = str(db_backup_dir)
             state["plan_path"] = str(self._plan_path)
             state = append_update_log(
                 state,

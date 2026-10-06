@@ -230,6 +230,7 @@ class StabilityRegressionTests(unittest.TestCase):
         self.assertNotIn("$args =", launcher.lower())
         self.assertIn("/api/shutdown", launcher)
         self.assertIn("Обновления проекта", launcher)
+        self.assertIn('health.project -ne "Sayuri Yukishiro"', launcher)
 
 
 if __name__ == "__main__":

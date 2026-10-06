@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -10,22 +12,13 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from .process_utils import process_alive
 from .update_state import (
     append_update_log,
     load_update_state,
     save_update_state,
     utc_now,
 )
-
-
-def _process_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
 
 
 def _git(
@@ -49,8 +42,18 @@ class UpdateHelper:
         self.plan_file = plan_file
         self.plan = json.loads(plan_file.read_text(encoding="utf-8"))
         self.root = Path(self.plan["root"]).resolve()
+        self.data_dir = Path(
+            self.plan.get("data_dir", self.root / "data")
+        ).resolve()
         self.state_path = Path(self.plan["state_path"])
         self.backup_path = Path(self.plan["backup_path"])
+        self.db_backup_dir = Path(
+            self.plan.get(
+                "db_backup_dir",
+                str(self.backup_path.with_suffix("")) + "-db",
+            )
+        )
+        self.verify_data_dir = self.state_path.parent / "verification-data"
         self.python = str(self.plan["python_executable"])
         self.parent_pid = int(self.plan["parent_pid"])
         self.before_sha = str(self.plan["before_sha"])
@@ -91,18 +94,56 @@ class UpdateHelper:
             "Ожидаю мягкой остановки Sayuri.",
         )
         deadline = time.monotonic() + timeout
-        while _process_alive(self.parent_pid):
+        while process_alive(self.parent_pid):
             if time.monotonic() >= deadline:
                 raise TimeoutError(
                     "Sayuri did not stop before update timeout."
                 )
             time.sleep(0.25)
 
+    def _backup_databases(self) -> list[str]:
+        if self.db_backup_dir.exists():
+            shutil.rmtree(self.db_backup_dir)
+        self.db_backup_dir.mkdir(parents=True, exist_ok=True)
+
+        backed_up: list[str] = []
+        if self.data_dir.exists():
+            for source in sorted(self.data_dir.rglob("*.db")):
+                try:
+                    relative = source.relative_to(self.data_dir)
+                except ValueError:
+                    continue
+                destination = self.db_backup_dir / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source_conn = sqlite3.connect(source, timeout=10)
+                target_conn = sqlite3.connect(destination, timeout=10)
+                try:
+                    source_conn.backup(target_conn)
+                finally:
+                    target_conn.close()
+                    source_conn.close()
+                backed_up.append(str(relative))
+
+        (self.db_backup_dir / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "created_at": utc_now(),
+                    "data_dir": str(self.data_dir),
+                    "databases": backed_up,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return backed_up
+
     def backup(self) -> None:
         self._phase(
             "backing_up",
             20,
-            "Создаю резервную копию текущего tracked-состояния проекта.",
+            "Создаю резервную копию кода и production SQLite.",
         )
         self.backup_path.parent.mkdir(parents=True, exist_ok=True)
         proc = _git(
@@ -118,10 +159,16 @@ class UpdateHelper:
             )
         if not self.backup_path.is_file():
             raise RuntimeError("Backup archive was not created.")
+
+        databases = self._backup_databases()
         state = load_update_state(self.state_path)
         state["backup_path"] = str(self.backup_path)
+        state["database_backup_path"] = str(self.db_backup_dir)
+        state["database_backups"] = databases
         save_update_state(state, self.state_path)
-        self._log(f"Backup создан: {self.backup_path}")
+        self._log(
+            f"Backup создан: code archive + {len(databases)} SQLite DB."
+        )
 
     def apply(self) -> None:
         self._phase(
@@ -178,8 +225,14 @@ class UpdateHelper:
             50,
             "Проверяю обновлённый проект перед перезапуском.",
         )
+        if self.verify_data_dir.exists():
+            shutil.rmtree(self.verify_data_dir)
+        self.verify_data_dir.mkdir(parents=True, exist_ok=True)
+
         env = os.environ.copy()
         env["PYTHONPATH"] = str(self.root / "src")
+        env["SAYURI_DATA_DIR"] = str(self.verify_data_dir)
+        env["SAYURI_SQLITE_JOURNAL_MODE"] = "DELETE"
         commands = [
             (
                 58,
@@ -224,32 +277,36 @@ class UpdateHelper:
                 "Runtime preflight",
             ),
         ]
-        with self.log_path.open("a", encoding="utf-8") as output:
-            for progress, command, label in commands:
-                self._phase(
-                    "verifying",
-                    progress,
-                    f"Проверка: {label}.",
-                )
-                proc = subprocess.run(
-                    command,
-                    cwd=self.root,
-                    env=env,
-                    stdout=output,
-                    stderr=subprocess.STDOUT,
-                    timeout=300,
-                    check=False,
-                )
-                if proc.returncode != 0:
-                    raise RuntimeError(
-                        f"Post-update verification failed: {label}."
+        try:
+            with self.log_path.open("a", encoding="utf-8") as output:
+                for progress, command, label in commands:
+                    self._phase(
+                        "verifying",
+                        progress,
+                        f"Проверка: {label}.",
                     )
+                    proc = subprocess.run(
+                        command,
+                        cwd=self.root,
+                        env=env,
+                        stdout=output,
+                        stderr=subprocess.STDOUT,
+                        timeout=300,
+                        check=False,
+                    )
+                    if proc.returncode != 0:
+                        raise RuntimeError(
+                            f"Post-update verification failed: {label}."
+                        )
+        finally:
+            shutil.rmtree(self.verify_data_dir, ignore_errors=True)
 
     def _start_core(self) -> subprocess.Popen[Any]:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(self.root / "src")
         env["SAYURI_PORT"] = str(self.port)
         env["SAYURI_SHUTDOWN_TOKEN"] = self.shutdown_token
+        env["SAYURI_DATA_DIR"] = str(self.data_dir)
         command = [
             self.python,
             "-m",
@@ -290,7 +347,10 @@ class UpdateHelper:
                     payload = json.loads(
                         response.read().decode("utf-8")
                     )
-                if payload.get("status") == "ok":
+                if (
+                    payload.get("status") == "ok"
+                    and payload.get("project") == "Sayuri Yukishiro"
+                ):
                     return payload
                 last_error = str(payload)
             except Exception as exc:
@@ -320,7 +380,11 @@ class UpdateHelper:
             "Перезапускаю Sayuri после обновления.",
         )
         process = self._start_core()
-        health = self._wait_health(process)
+        try:
+            health = self._wait_health(process)
+        except Exception:
+            self._terminate_process(process)
+            raise
         state = load_update_state(self.state_path)
         state.update(
             {
@@ -337,6 +401,7 @@ class UpdateHelper:
                 "current_sha": self.target_sha,
                 "target_sha": self.target_sha,
                 "restart_pid": process.pid,
+                "helper_pid": None,
                 "last_update": utc_now(),
                 "rollback": None,
             }
@@ -347,6 +412,20 @@ class UpdateHelper:
         )
         save_update_state(state, self.state_path)
         return process
+
+    def _restore_database_backups(self) -> int:
+        if not self.db_backup_dir.is_dir():
+            return 0
+        restored = 0
+        for snapshot in sorted(self.db_backup_dir.rglob("*.db")):
+            relative = snapshot.relative_to(self.db_backup_dir)
+            destination = self.data_dir / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            for suffix in ("-wal", "-shm"):
+                Path(str(destination) + suffix).unlink(missing_ok=True)
+            shutil.copy2(snapshot, destination)
+            restored += 1
+        return restored
 
     def rollback(self, reason: str) -> subprocess.Popen[Any] | None:
         self._phase(
@@ -371,6 +450,7 @@ class UpdateHelper:
                         "status": "blocked_local_changes",
                         "reason": reason,
                         "backup_path": str(self.backup_path),
+                        "database_backup_path": str(self.db_backup_dir),
                     },
                 }
             )
@@ -413,8 +493,12 @@ class UpdateHelper:
             save_update_state(state, self.state_path)
             return None
 
+        restored = self._restore_database_backups()
         self._log(
-            f"Откат выполнен до {self.before_sha[:12]}.",
+            (
+                f"Откат выполнен до {self.before_sha[:12]}; "
+                f"восстановлено SQLite DB: {restored}."
+            ),
             level="warning",
         )
         process = self._start_core()
@@ -462,10 +546,12 @@ class UpdateHelper:
                 "can_apply": False,
                 "current_sha": self.before_sha,
                 "restart_pid": process.pid,
+                "helper_pid": None,
                 "last_update": utc_now(),
                 "rollback": {
                     "status": "completed",
                     "reason": reason,
+                    "databases_restored": restored,
                 },
             }
         )
@@ -499,6 +585,7 @@ class UpdateHelper:
                         "progress": 100,
                         "message": f"Обновление не применено: {exc}",
                         "can_apply": False,
+                        "helper_pid": None,
                         "rollback": {
                             "status": "not_required",
                             "reason": str(exc),
