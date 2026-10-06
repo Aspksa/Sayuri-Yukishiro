@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from .cognitive.engine import CognitiveCore
 from .core.runtime import SystemCore
+from .modules.runtime import ModuleRuntime
 from .paths import WEB_DIR, project_version
 from .version import SERVER_PRODUCT
 
@@ -24,10 +25,12 @@ class SayuriHTTPServer(ThreadingHTTPServer):
         server_address: tuple[str, int],
         core: SystemCore,
         cognitive: CognitiveCore,
+        modules: ModuleRuntime,
         shutdown_token: str = "",
     ):
         self.core = core
         self.cognitive = cognitive
+        self.modules = modules
         self.shutdown_token = shutdown_token
         super().__init__(server_address, SayuriHandler)
 
@@ -73,12 +76,18 @@ class SayuriHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         core = self.app_server.core
         cognitive = self.app_server.cognitive
+        modules = self.app_server.modules
 
         if path == "/api/health":
             status = core.status()
             overall = status["health"]["overall"]
             cognitive_status = cognitive.status()
-            healthy = overall == "healthy" and cognitive_status["running"]
+            modules_health = modules.health()
+            healthy = (
+                overall == "healthy"
+                and cognitive_status["running"]
+                and modules_health["overall"] != "failed"
+            )
             self._json(
                 {
                     "status": "ok" if healthy else "degraded",
@@ -86,6 +95,8 @@ class SayuriHandler(BaseHTTPRequestHandler):
                     "version": project_version(),
                     "core_version": status["core_version"],
                     "cognitive_version": cognitive_status["version"],
+                    "modules_version": modules.VERSION,
+                    "modules_health": modules_health["overall"],
                     "pid": os.getpid(),
                 }
             )
@@ -115,9 +126,22 @@ class SayuriHandler(BaseHTTPRequestHandler):
             self._json({"modules": core.db.list_modules()})
             return
 
+        if path == "/api/modules/runtime":
+            self._json(modules.status())
+            return
+
+        if path == "/api/modules/health":
+            self._json(modules.health())
+            return
+
+        if path == "/api/modules/states":
+            self._json({"states": core.db.list_module_states()})
+            return
+
         if path == "/api/system":
             core_status = core.status(deep=True)
             cognitive_status = cognitive.status()
+            modules_health = modules.health()
             self._json(
                 {
                     "project": "Sayuri Yukishiro",
@@ -130,6 +154,9 @@ class SayuriHandler(BaseHTTPRequestHandler):
                     "database": str(core.db.path),
                     "database_check": core_status["database_check"],
                     "module_count": len(core.db.list_modules()),
+                    "modules_version": modules.VERSION,
+                    "modules_running": modules_health["running_count"],
+                    "modules_health": modules_health["overall"],
                     "recoverable_tasks": core_status["recoverable_tasks"],
                 }
             )
@@ -171,25 +198,39 @@ class SayuriHandler(BaseHTTPRequestHandler):
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     core = SystemCore()
     cognitive: CognitiveCore | None = None
+    modules: ModuleRuntime | None = None
     server: SayuriHTTPServer | None = None
     try:
         core.start()
         cognitive = CognitiveCore(core.api, core.db)
         cognitive.start()
+        modules = ModuleRuntime(
+            core.api,
+            core.db,
+            capabilities=cognitive.capabilities,
+            strict_startup=bool(core.config.get("modules.strict_startup", False)),
+        )
+        modules.start()
         server = SayuriHTTPServer(
             (host, port),
             core,
             cognitive,
+            modules,
             shutdown_token=os.environ.get("SAYURI_SHUTDOWN_TOKEN", ""),
         )
+        modules_health = modules.health()
         print(
             f"Sayuri Yukishiro {project_version()} / system core {core.CORE_VERSION} / "
-            f"cognitive core {cognitive.VERSION} listening on http://{host}:{port}"
+            f"cognitive core {cognitive.VERSION} / module runtime {modules.VERSION} "
+            f"({modules_health['running_count']}/{modules_health['module_count']} modules) "
+            f"listening on http://{host}:{port}"
         )
         server.serve_forever(poll_interval=0.5)
     finally:
         if server is not None:
             server.server_close()
+        if modules is not None:
+            modules.stop()
         if cognitive is not None:
             cognitive.stop()
         core.stop()

@@ -10,6 +10,7 @@ from pathlib import Path
 from .cognitive.engine import CognitiveCore
 from .core.runtime import SystemCore
 from .database import CoreDatabase
+from .modules.runtime import ModuleRuntime
 from .paths import DATA_DIR, PROJECT_ROOT, ensure_runtime_dirs
 
 
@@ -83,6 +84,17 @@ def _check_cores() -> list[Check]:
             completed = cognitive.run_safe(session.id)
             cognitive_status = cognitive.status()
             receipt_count = len(cognitive.receipts(session.id))
+
+            modules = ModuleRuntime(
+                core.api,
+                db,
+                capabilities=cognitive.capabilities,
+            )
+            modules.start()
+            modules_status = modules.status()
+            modules_health = modules.health()
+            modules.stop()
+
             cognitive.stop()
             core.stop()
 
@@ -93,6 +105,10 @@ def _check_cores() -> list[Check]:
             and completed.verification.complete
             and receipt_count == len(completed.plan.steps)
         )
+        modules_healthy = modules_health["overall"] != "failed" and not [
+            item
+            for item in modules_status["discovery"]["rejected"]
+        ]
         return [
             Check(
                 "system_core",
@@ -114,12 +130,25 @@ def _check_cores() -> list[Check]:
                     f"receipts={receipt_count}"
                 ),
             ),
+            Check(
+                "module_runtime",
+                modules_healthy,
+                "warning" if not modules_healthy else "info",
+                (
+                    f"Modules {modules_status['version']}; "
+                    f"running={modules_health['running_count']}/"
+                    f"{modules_health['module_count']}; "
+                    f"health={modules_health['overall']}; "
+                    f"rejected_manifests={len(modules_status['discovery']['rejected'])}"
+                ),
+            ),
         ]
     except Exception as exc:
         detail = f"Core diagnostics failed: {exc}"
         return [
             Check("system_core", False, "fatal", detail),
             Check("cognitive_core", False, "fatal", detail),
+            Check("module_runtime", False, "fatal", detail),
         ]
 
 

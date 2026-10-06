@@ -125,6 +125,7 @@ class CoreDatabase:
             )
             self._apply_system_core_schema(conn)
             self._apply_cognitive_schema(conn)
+            self._apply_module_runtime_schema(conn)
 
             now = utc_now()
             conn.execute(
@@ -217,6 +218,29 @@ class CoreDatabase:
         )
         conn.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?)",
+            (utc_now(),),
+        )
+
+    def _apply_module_runtime_schema(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS module_states (
+                module_id TEXT PRIMARY KEY,
+                state TEXT NOT NULL,
+                version TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                permissions_json TEXT NOT NULL,
+                capabilities_json TEXT NOT NULL,
+                schema_version INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_module_states_state
+                ON module_states(state, updated_at);
+            """
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(4, ?)",
             (utc_now(),),
         )
 
@@ -492,6 +516,72 @@ class CoreDatabase:
                 item["evidence"] = json.loads(item.pop("evidence_json"))
                 result.append(item)
             return result
+
+
+    def upsert_module_state(
+        self,
+        module_id: str,
+        state: str,
+        version: str,
+        *,
+        detail: str = "",
+        permissions: list[str] | None = None,
+        capabilities: list[str] | None = None,
+        schema_version: int = 0,
+    ) -> None:
+        with self.session() as conn:
+            conn.execute(
+                """
+                INSERT INTO module_states(
+                    module_id, state, version, detail,
+                    permissions_json, capabilities_json, schema_version, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(module_id) DO UPDATE SET
+                    state=excluded.state,
+                    version=excluded.version,
+                    detail=excluded.detail,
+                    permissions_json=excluded.permissions_json,
+                    capabilities_json=excluded.capabilities_json,
+                    schema_version=excluded.schema_version,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    module_id,
+                    state,
+                    version,
+                    detail,
+                    _json_text(list(permissions or [])),
+                    _json_text(list(capabilities or [])),
+                    int(schema_version),
+                    utc_now(),
+                ),
+            )
+
+    def list_module_states(self) -> list[dict[str, Any]]:
+        with self.session() as conn:
+            rows = conn.execute(
+                """
+                SELECT module_id, state, version, detail,
+                       permissions_json, capabilities_json, schema_version, updated_at
+                FROM module_states
+                ORDER BY module_id
+                """
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                item["permissions"] = json.loads(item.pop("permissions_json"))
+                item["capabilities"] = json.loads(item.pop("capabilities_json"))
+                result.append(item)
+            return result
+
+    def set_module_status(self, module_id: str, status: str) -> None:
+        with self.session() as conn:
+            conn.execute(
+                "UPDATE modules SET status=?, updated_at=? WHERE id=?",
+                (status, utc_now(), module_id),
+            )
 
 
 def module_database_path(module_id: str) -> Path:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from .types import RiskLevel
@@ -14,6 +14,9 @@ class Capability:
     risk: RiskLevel
     handler: CapabilityHandler | None
     description: str = ""
+    module_id: str | None = None
+    required_permissions: tuple[str, ...] = field(default_factory=tuple)
+    permissions_granted: bool = True
 
 
 @dataclass(frozen=True)
@@ -33,19 +36,44 @@ class CapabilityRegistry:
             raise ValueError(f"Capability already registered: {capability.name}")
         self._items[capability.name] = capability
 
+    def unregister(self, name: str) -> bool:
+        return self._items.pop(name, None) is not None
+
+    def unregister_module(self, module_id: str) -> list[str]:
+        """Снять все способности модуля при его остановке."""
+
+        removed = [
+            name
+            for name, item in self._items.items()
+            if item.module_id is not None and item.module_id == module_id
+        ]
+        for name in removed:
+            del self._items[name]
+        return sorted(removed)
+
+    def names_for_module(self, module_id: str) -> list[str]:
+        return sorted(
+            name
+            for name, item in self._items.items()
+            if item.module_id is not None and item.module_id == module_id
+        )
+
     def get(self, name: str) -> Capability | None:
         return self._items.get(name)
 
     def names(self) -> list[str]:
         return sorted(self._items)
 
-    def snapshot(self) -> list[dict[str, str | bool]]:
+    def snapshot(self) -> list[dict[str, Any]]:
         return [
             {
                 "name": item.name,
                 "risk": item.risk.value,
-                "executable": item.handler is not None,
+                "executable": item.handler is not None and item.permissions_granted,
                 "description": item.description,
+                "module_id": item.module_id,
+                "required_permissions": list(item.required_permissions),
+                "permissions_granted": item.permissions_granted,
             }
             for item in sorted(self._items.values(), key=lambda value: value.name)
         ]
@@ -66,6 +94,13 @@ class ExecutionGate:
             return CapabilityDecision(
                 allowed=False,
                 reason="requires_action_broker",
+                capability=capability.name,
+                risk=capability.risk,
+            )
+        if not capability.permissions_granted:
+            return CapabilityDecision(
+                allowed=False,
+                reason="module_permission_denied",
                 capability=capability.name,
                 risk=capability.risk,
             )

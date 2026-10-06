@@ -84,7 +84,7 @@ class SystemCoreTests(unittest.TestCase):
             finally:
                 restored.stop()
 
-    def test_database_schema_tracks_cognitive_migration(self) -> None:
+    def test_database_schema_tracks_all_migrations(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = CoreDatabase(Path(tmp) / "schema.db")
             db.initialize()
@@ -95,7 +95,7 @@ class SystemCoreTests(unittest.TestCase):
                         "SELECT version FROM schema_migrations ORDER BY version"
                     ).fetchall()
                 ]
-            self.assertEqual(versions, [1, 2, 3])
+            self.assertEqual(versions, [1, 2, 3, 4])
 
 
 if __name__ == "__main__":

@@ -8,5 +8,8 @@
     "level": "INFO",
     "max_bytes": 2000000,
     "backup_count": 3
+  },
+  "modules": {
+    "strict_startup": false
   }
 }

@@ -1,0 +1,25 @@
+{
+  "manifest_version": 1,
+  "id": "system_probe",
+  "name": "System Probe",
+  "version": "0.1.0",
+  "description": "Эталонный модуль: показывает контракт модуля, миграции собственной БД и read-only способность для когнитивного ядра.",
+  "entry_point": "module:SystemProbeModule",
+  "enabled": true,
+  "requires_core": ">=0.3.0",
+  "schema_version": 1,
+  "dependencies": [],
+  "permissions": [
+    "core.config.read",
+    "core.events.publish",
+    "module.database"
+  ],
+  "capabilities": [
+    {
+      "name": "snapshot",
+      "risk": "read_only",
+      "handler": "snapshot",
+      "description": "Вернуть состояние модуля и число записанных наблюдений без изменения внешнего состояния."
+    }
+  ]
+}

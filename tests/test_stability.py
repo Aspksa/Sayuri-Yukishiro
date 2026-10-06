@@ -24,15 +24,17 @@ from sayuri_yukishiro.version import (
 
 
 class StabilityRegressionTests(unittest.TestCase):
-    def test_bind_failure_stops_both_cores(self) -> None:
+    def test_bind_failure_stops_every_started_layer(self) -> None:
         system = MagicMock()
         system.api = object()
         system.db = object()
         cognitive = MagicMock()
+        modules = MagicMock()
 
         with (
             patch("sayuri_yukishiro.server.SystemCore", return_value=system),
             patch("sayuri_yukishiro.server.CognitiveCore", return_value=cognitive),
+            patch("sayuri_yukishiro.server.ModuleRuntime", return_value=modules),
             patch(
                 "sayuri_yukishiro.server.SayuriHTTPServer",
                 side_effect=OSError("address already in use"),
@@ -43,6 +45,8 @@ class StabilityRegressionTests(unittest.TestCase):
 
         system.start.assert_called_once()
         cognitive.start.assert_called_once()
+        modules.start.assert_called_once()
+        modules.stop.assert_called_once()
         cognitive.stop.assert_called_once()
         system.stop.assert_called_once()
 

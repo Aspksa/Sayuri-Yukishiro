@@ -17,6 +17,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "recovery_enabled": True,
     },
     "logging": {"level": "INFO", "max_bytes": 2000000, "backup_count": 3},
+    "modules": {"strict_startup": False},
 }
 
 
@@ -45,6 +46,10 @@ class ConfigurationService(ManagedService):
             data["core"]["recovery_enabled"] = os.environ["SAYURI_RECOVERY_ENABLED"].strip().lower() not in {"0","false","no","off"}
         if os.environ.get("SAYURI_LOG_LEVEL"):
             data["logging"]["level"] = os.environ["SAYURI_LOG_LEVEL"].upper()
+        if os.environ.get("SAYURI_MODULES_STRICT_STARTUP"):
+            data["modules"]["strict_startup"] = os.environ[
+                "SAYURI_MODULES_STRICT_STARTUP"
+            ].strip().lower() not in {"0", "false", "no", "off"}
 
         with self._data_lock:
             self._data = data

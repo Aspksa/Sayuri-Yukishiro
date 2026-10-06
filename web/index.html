@@ -53,6 +53,7 @@
     <article class="card">
       <div class="label">Модули</div>
       <div class="value" id="moduleCount">—</div>
+      <div class="small" id="moduleRuntime"></div>
     </article>
   </section>
 
@@ -79,6 +80,9 @@ async function load() {
     document.getElementById('dbcheck').textContent = system.database_check;
     document.getElementById('dbpath').textContent = system.database;
     document.getElementById('moduleCount').textContent = system.module_count;
+    document.getElementById('moduleRuntime').textContent =
+      'Module Runtime v' + system.modules_version + ' · запущено ' +
+      system.modules_running + ' · ' + system.modules_health;
 
     const root = document.getElementById('modules');
     root.innerHTML = '';
