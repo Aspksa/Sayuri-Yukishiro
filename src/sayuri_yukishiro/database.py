@@ -479,7 +479,7 @@ class CoreDatabase:
                        evidence_json, created_at
                 FROM cognitive_receipts
                 WHERE session_id=?
-                ORDER BY created_at, id
+                ORDER BY rowid
                 """,
                 (session_id,),
             ).fetchall()

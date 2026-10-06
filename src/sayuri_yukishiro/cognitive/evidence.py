@@ -35,5 +35,5 @@ def make_receipt(
         capability=capability,
         status=status,
         evidence=dict(evidence or {}),
-        created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        created_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
     )
