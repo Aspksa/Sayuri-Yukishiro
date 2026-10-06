@@ -296,6 +296,74 @@ class UpdateServiceTests(unittest.TestCase):
                 "rolled_back",
             )
 
+    def test_helper_refuses_destructive_rollback_if_worktree_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "repo"
+            root.mkdir()
+            self._git(root, "init")
+            self._git(root, "config", "user.email", "test@example.invalid")
+            self._git(root, "config", "user.name", "Sayuri Test")
+
+            (root / "VERSION").write_text("0.3.1\n", encoding="utf-8")
+            (root / "payload.txt").write_text("old\n", encoding="utf-8")
+            self._git(root, "add", "VERSION", "payload.txt")
+            self._git(root, "commit", "-m", "old")
+            before = self._git(root, "rev-parse", "HEAD")
+
+            (root / "VERSION").write_text("0.4.0\n", encoding="utf-8")
+            (root / "payload.txt").write_text("new\n", encoding="utf-8")
+            self._git(root, "add", "VERSION", "payload.txt")
+            self._git(root, "commit", "-m", "new")
+            target = self._git(root, "rev-parse", "HEAD")
+            self._git(root, "reset", "--hard", before)
+
+            control = base / "update"
+            control.mkdir()
+            state_file = control / "status.json"
+            save_update_state(default_update_state(), state_file)
+            plan_file = control / "plan.json"
+            plan_file.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "root": str(root),
+                        "state_path": str(state_file),
+                        "backup_path": str(control / "backup.zip"),
+                        "parent_pid": 0,
+                        "python_executable": sys.executable,
+                        "port": 8765,
+                        "shutdown_token": "test-token",
+                        "before_sha": before,
+                        "target_sha": target,
+                        "upstream": "origin/main",
+                        "current_version": "0.3.1",
+                        "available_version": "0.4.0",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            helper = UpdateHelper(plan_file)
+            helper.backup()
+            helper.apply()
+            (root / "local-note.txt").write_text(
+                "must survive\n",
+                encoding="utf-8",
+            )
+
+            restarted = helper.rollback("forced test failure")
+            state = load_update_state(state_file)
+
+            self.assertIsNone(restarted)
+            self.assertEqual(
+                state["rollback"]["status"],
+                "blocked_local_changes",
+            )
+            self.assertEqual(self._git(root, "rev-parse", "HEAD"), target)
+            self.assertTrue((root / "local-note.txt").is_file())
+            self.assertTrue((control / "backup.zip").is_file())
+
     def test_update_ui_is_part_of_system_shell(self) -> None:
         from sayuri_yukishiro.paths import PROJECT_ROOT
 

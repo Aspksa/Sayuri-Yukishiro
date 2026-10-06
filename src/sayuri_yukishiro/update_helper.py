@@ -354,6 +354,34 @@ class UpdateHelper:
             86,
             f"Проверка не пройдена. Выполняю откат: {reason}",
         )
+
+        dirty = _git(self.root, "status", "--porcelain")
+        if dirty.returncode != 0 or dirty.stdout.strip():
+            state = load_update_state(self.state_path)
+            state.update(
+                {
+                    "phase": "failed",
+                    "progress": 100,
+                    "message": (
+                        "Автоматический откат остановлен: после установки "
+                        "обнаружены локальные изменения. Backup сохранён."
+                    ),
+                    "can_apply": False,
+                    "rollback": {
+                        "status": "blocked_local_changes",
+                        "reason": reason,
+                        "backup_path": str(self.backup_path),
+                    },
+                }
+            )
+            state = append_update_log(
+                state,
+                state["message"],
+                level="error",
+            )
+            save_update_state(state, self.state_path)
+            return None
+
         reset = _git(
             self.root,
             "reset",
