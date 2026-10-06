@@ -5,8 +5,8 @@
   "version": "0.2.0",
   "development_version": "0.3.0",
   "core_version": "0.2.0",
-  "stage": "system-core",
-  "status": "completed",
+  "stage": "cognitive-core",
+  "status": "in_progress",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -41,7 +41,7 @@
     "no_update_over_local_changes": true,
     "bind_localhost_only": true
   },
-  "next_action": "v0.3.0 Module Runtime & Lifecycle: add module manifests, discovery, dependencies, permissions, migrations, health checks, and controlled startup/shutdown.",
+  "next_action": "v0.3.0 Cognitive Core: implement context, intent, goals, planning, capability safety boundary, receipts, verification, confidence, recovery integration, provider interface, and cognitive persistence.",
   "system_core": {
     "version": "0.2.0",
     "services": [
@@ -55,5 +55,6 @@
     "database_schema": 2,
     "api": "CoreAPI",
     "recovery_policy": "restore context and next_action without automatic replay of arbitrary actions"
-  }
+  },
+  "cognitive_core_development_version": "0.3.0"
 }
