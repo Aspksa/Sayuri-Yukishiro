@@ -52,7 +52,7 @@ next_action: v0.1.1 — внедрить обязательный протоко
 
 Дата: 2026-10-07
 
-Статус: in_progress
+Статус: completed
 
 Изменения:
 
@@ -66,16 +66,18 @@ next_action: v0.1.1 — внедрить обязательный протоко
 
 Проверки:
 
-- tests: PENDING
+- tests: PASS
 - lint: NOT_CONFIGURED
 - type-check: NOT_CONFIGURED
-- smoke-test: PENDING
-- protocol-validation: PENDING
+- smoke-test: PASS
+- protocol-validation: PASS
+- python-compile: PASS
+- powershell-syntax: PASS
 
 Commit:
 
-PENDING_AFTER_IMPLEMENTATION_CHECKS
+3b7c54c23883300e8de6335f5b96e4fd40ebf231
 
 Следующий шаг:
 
-next_action: завершить CI v0.1.1, финализировать журнал и затем начать v0.2.0 Module Runtime & Lifecycle.
+next_action: v0.2.0 — Module Runtime & Lifecycle: manifests, discovery, dependencies, permissions, migrations, health checks and controlled startup/shutdown.

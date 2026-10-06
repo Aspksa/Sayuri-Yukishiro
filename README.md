@@ -1,7 +1,7 @@
 # Sayuri Yukishiro
 
-Current release: v0.1.0
-Development target: v0.1.1
+Current release: v0.1.1
+Development target: v0.2.0
 Core foundation: v0.1.0
 
 Sayuri Yukishiro is a modular personal AI platform.
@@ -51,4 +51,4 @@ Automatic Git updates are conservative: local changes block automatic update, on
 
 ## Next release after governance
 
-After v0.1.1 is finalized, the next functional release is v0.2.0 — Module Runtime & Lifecycle, because the mandatory versioning policy classifies new functionality as a MINOR release.
+The next functional release is v0.2.0 — Module Runtime & Lifecycle, because the mandatory versioning policy classifies new functionality as a MINOR release.
