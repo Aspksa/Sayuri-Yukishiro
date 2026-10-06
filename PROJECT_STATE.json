@@ -2,11 +2,11 @@
   "schema_version": 2,
   "project": "Sayuri Yukishiro",
   "repository": "Aspksa/Sayuri-Yukishiro",
-  "version": "0.3.1",
-  "development_version": "0.4.0",
-  "core_version": "0.2.1",
+  "version": "0.4.0",
+  "development_version": "0.5.0",
+  "core_version": "0.3.0",
   "stage": "project-updates",
-  "status": "in_progress",
+  "status": "completed",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -19,7 +19,7 @@
     "web_shell": "Python standard library HTTP server",
     "core_database": "data/core/sayuri_yukishiro.db",
     "module_databases": "data/modules/<module_id>.db",
-    "auto_update": "configured upstream + fast-forward only when worktree is clean",
+    "auto_update": "System Core UpdateService -> exact checked upstream SHA -> external helper -> verification -> restart/rollback",
     "data_directory": "project data/ by default; SAYURI_DATA_DIR may relocate runtime data"
   },
   "update_protocol": {
@@ -38,24 +38,29 @@
   },
   "safety": {
     "no_hardcoded_drive_letter": true,
-    "no_forced_git_reset": true,
     "no_update_over_local_changes": true,
     "bind_localhost_only": true,
     "graceful_shutdown": "localhost tokenized POST /api/shutdown with Kill fallback only after timeout",
-    "sqlite_journal_policy": "WAL on safe local storage; DELETE on OneDrive/network/removable storage"
+    "sqlite_journal_policy": "WAL on safe local storage; DELETE on OneDrive/network/removable storage",
+    "destructive_git_reset_policy": "rollback only to recorded before_sha when worktree is clean; otherwise automatic rollback is blocked",
+    "local_http": "127.0.0.1 only; loopback client + loopback Host required",
+    "update_control": "separate ephemeral control token; shutdown token is not reused",
+    "update_data_verification": "post-update tests use isolated SAYURI_DATA_DIR",
+    "update_rollback": "tracked code archive + SQLite snapshots; failed version DBs/sidecars removed on rollback"
   },
-  "next_action": "v0.4.0 Project Updates: implement core UpdateService, persistent update state, protected update API, external apply/rollback helper, built-in «Обновления проекта» page, tray integration, and regression tests.",
+  "next_action": "v0.5.0 Module Runtime & Lifecycle: add manifests, discovery, dependency graph, permissions, migrations, health checks, controlled startup/shutdown, and safe capability registration into the Cognitive Core.",
   "system_core": {
-    "version": "0.2.1",
+    "version": "0.3.0",
     "services": [
       "configuration",
       "logging",
       "event_bus",
       "job_manager",
       "checkpoints",
-      "recovery"
+      "recovery",
+      "update_service"
     ],
-    "database_schema": 2,
+    "database_schema": 3,
     "api": "CoreAPI",
     "recovery_policy": "restore context and next_action without automatic replay of arbitrary actions",
     "job_history_limit": 500,
@@ -93,5 +98,31 @@
       "/api/cognitive",
       "/api/cognitive/sessions"
     ]
+  },
+  "project_updates": {
+    "ui_name": "Обновления проекта",
+    "owner": "System Core / UpdateService",
+    "module": false,
+    "state_dir": "data/update",
+    "api": [
+      "GET /api/update/status",
+      "POST /api/update/check",
+      "POST /api/update/apply"
+    ],
+    "apply_model": "external helper after graceful core shutdown",
+    "target_policy": "exact SHA checked by UpdateService; fast-forward only",
+    "backup": [
+      "git archive of before_sha",
+      "SQLite Connection.backup snapshots"
+    ],
+    "verification": [
+      "update protocol validation",
+      "Python compile",
+      "unit/regression tests",
+      "runtime preflight"
+    ],
+    "rollback": "only on clean worktree; restore before_sha and SQLite snapshot; local changes block destructive rollback",
+    "restart_gate": "status=ok + project identity + expected project version",
+    "tray": "menu item «Обновления проекта» uses the same local API"
   }
 }

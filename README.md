@@ -1,32 +1,74 @@
 # Sayuri Yukishiro
 
-**Текущий релиз:** v0.3.1  
-**Системное ядро:** v0.2.1  
+**Текущий релиз:** v0.4.0  
+**Системное ядро:** v0.3.0  
 **Когнитивное ядро:** v0.3.0  
-**Следующая разработка:** v0.4.0
+**Следующая разработка:** v0.5.0
 
 Sayuri Yukishiro — модульная персональная AI-платформа.
 
-## Стабилизация v0.3.1
+## Обновления проекта
 
-- BAT больше не передаёт опасный путь `%~dp0` через `-Root`.
-- Ошибка bind корректно останавливает системное и когнитивное ядра.
-- Windows tray сначала выполняет мягкое завершение через токенизированный `POST /api/shutdown`; принудительный Kill — только fallback.
-- SQLite использует `DELETE` на OneDrive, сетевых и съёмных путях и `WAL` на безопасном локальном диске.
-- Runtime data можно вынести через `SAYURI_DATA_DIR`.
-- JobManager ограничивает историю и освобождает завершённые futures.
-- `/api/health` больше не запускает `quick_check` на каждом polling.
-- Git updater следует upstream текущей ветки вместо жёсткого `origin/main`.
-- Версия интерфейса читается из `VERSION`, Python metadata централизована в `version.py`.
-- PowerShell launcher не использует автоматическую переменную `$args`.
+Начиная с v0.4.0 обновление — часть **Системного ядра**, а не функциональный модуль.
+
+Встроенный `UpdateService`:
+
+- проверяет configured upstream текущей Git-ветки;
+- показывает текущую и доступную версию;
+- показывает список изменений;
+- не изменяет проект во время preflight;
+- фиксирует точный проверенный target SHA;
+- не обновляет dirty или diverged worktree;
+- перед применением запускает отдельный update-helper;
+- мягко останавливает Sayuri;
+- создаёт backup tracked-кода и SQLite;
+- применяет только fast-forward к проверенному SHA;
+- проверяет обновлённую версию в изолированном runtime data;
+- перезапускает Sayuri только после успешных проверок;
+- при сбое откатывает код и SQLite, если worktree остаётся чистым;
+- блокирует destructive rollback, если после установки появились локальные изменения.
+
+В системной web-оболочке есть страница **«Обновления проекта»** с кнопками **«Проверить»** и **«Обновить»**, прогрессом, списком изменений и журналом. Такой же пункт есть в Windows tray.
+
+Подробная архитектура: `docs/PROJECT_UPDATES.md`.
+
+## API обновлений
+
+- `GET /api/update/status`
+- `POST /api/update/check`
+- `POST /api/update/apply`
+
+Управляющие операции доступны только локальной системной оболочке через отдельный ephemeral control-token. UpdateService намеренно не экспортируется через обычный модульный `CoreAPI`.
+
+## Системное ядро v0.3.0
+
+Системное ядро управляет:
+
+- Configuration;
+- Logging;
+- Event Bus;
+- Job Manager;
+- UpdateService;
+- Checkpoints;
+- Recovery;
+- HealthMonitor;
+- ограниченным CoreAPI.
 
 ## Когнитивное ядро v0.3.0
 
-Контекст, намерение, цели, планирование, Capability Registry, Execution Gate, evidence receipts, verification, confidence, contradictions, persistence и recovery.
+Когнитивное ядро содержит контекст, intent, цели, планирование, Capability Registry, Execution Gate, evidence receipts, verification, confidence, contradictions, persistence и recovery.
 
-## Системное ядро v0.2.1
+## Безопасность обновления
 
-Lifecycle служб, конфигурация, logging, Event Bus, фоновые задачи, health, checkpoints, recovery и CoreAPI.
+- localhost-only HTTP;
+- проверка loopback client + loopback Host;
+- shutdown-token и update control-token разделены;
+- target SHA фиксируется на этапе проверки;
+- только fast-forward apply;
+- production SQLite не используется в post-update verification;
+- rollback не выполняет `git reset --hard`, если worktree стал dirty;
+- после restart проверяются health, identity проекта и ожидаемая версия;
+- Windows PID liveness проверяется через platform-aware process utility.
 
 ## Запуск
 
@@ -36,4 +78,4 @@ Lifecycle служб, конфигурация, logging, Event Bus, фоновы
 
 ## Следующий этап
 
-v0.4.0 — система модулей и их жизненный цикл.
+**v0.5.0 — Module Runtime & Lifecycle:** manifests, discovery, зависимости, permissions, migrations, health-check, управляемый lifecycle и безопасная регистрация способностей модулей в Cognitive CapabilityRegistry.

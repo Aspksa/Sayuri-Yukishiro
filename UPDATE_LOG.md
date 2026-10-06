@@ -226,7 +226,7 @@ next_action: v0.4.0 — Система модулей и их жизненный
 
 Дата: 2026-10-07
 
-Статус: in_progress
+Статус: completed
 
 Изменения:
 
@@ -285,18 +285,18 @@ next_action: v0.4.0 — Система модулей и их жизненный
 
 Проверки:
 
-- tests: PENDING
+- tests: PASS
 - lint: NOT_CONFIGURED
 - type-check: NOT_CONFIGURED
-- smoke-test: PENDING
-- protocol-validation: PENDING
-- python-compile: PENDING
-- powershell-syntax: PENDING
+- smoke-test: PASS
+- protocol-validation: PASS
+- python-compile: PASS
+- powershell-syntax: PASS
 
 Commit:
 
-PENDING_AFTER_IMPLEMENTATION_CHECKS
+e4a45a2fd617005109802b6cc99ebe4f8a6b70c5
 
 Следующий шаг:
 
-next_action: завершить transactional hardening «Обновления проекта», прогнать regression tests, финализировать v0.4.0 и опубликовать только после зелёного CI.
+next_action: v0.5.0 — Module Runtime & Lifecycle: manifests, discovery, dependency graph, permissions, migrations, health-check, controlled startup/shutdown и регистрация безопасных способностей модулей в Cognitive CapabilityRegistry.

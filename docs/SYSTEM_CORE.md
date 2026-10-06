@@ -1,97 +1,134 @@
-# Системное ядро Sayuri Yukishiro — v0.2.1
+# Системное ядро Sayuri Yukishiro — v0.3.0
 
 ## Назначение
 
-Системное ядро — это инфраструктурный слой между запуском проекта и будущими функциональными модулями. Оно не является когнитивным мозгом Sayuri и не содержит логику конкретных модулей.
+Системное ядро — привилегированный инфраструктурный слой Sayuri. Оно управляет жизненным циклом процесса и службами, которые должны оставаться доступными независимо от состояния будущих функциональных модулей.
 
 ## Службы ядра
 
-1. Configuration — единая конфигурация ядра.
-2. Logging — структурированный журнал с ротацией файлов.
+1. Configuration — единая конфигурация.
+2. Logging — структурированные журналы с ротацией.
 3. Event Bus — внутренняя шина событий.
-4. Job Manager — управляемое выполнение фоновых задач.
-5. Checkpoints — долговечные контрольные точки.
-6. Recovery — обнаружение незавершённой работы после перезапуска.
+4. Job Manager — ограниченный пул фоновых задач.
+5. UpdateService — проверка и подготовка безопасного обновления проекта.
+6. Checkpoints — долговечные контрольные точки.
+7. Recovery — восстановление контекста незавершённой работы.
 
-Service Registry запускает службы в порядке регистрации и останавливает в обратном порядке.
+Service Registry запускает службы по порядку и останавливает в обратном порядке.
 
-## Контроль состояния
+## UpdateService
 
-Каждая служба имеет состояние:
+UpdateService находится внутри `core/`, а не в системе модулей. Это принципиальная граница полномочий: обновление может заменять код модулей и ядра, останавливать процесс и запускать внешний helper, поэтому эти операции нельзя выдавать обычным модулям через `CoreAPI`.
 
-- created
-- starting
-- running
-- stopping
-- stopped
-- failed
+Основные обязанности:
 
-HealthMonitor объединяет состояния служб в общий результат healthy, degraded или failed.
+- определить текущий configured upstream;
+- обновить tracking-ref явным Git refspec;
+- сравнить текущий HEAD с upstream;
+- отказаться от обновления при dirty/diverged состоянии;
+- определить доступную версию и список Git-изменений;
+- сохранить состояние операции в `data/update/status.json`;
+- подготовить immutable apply-plan с `before_sha` и `target_sha`;
+- запустить внешний update-helper.
 
-## Контрольные точки и восстановление
+## Процесс применения
 
-Незавершённая задача сохраняет:
+```text
+Проверить
+   ↓
+UpdateService
+   ↓
+фиксированный target SHA
+   ↓
+apply-plan
+   ↓
+external update-helper
+   ↓
+мягкая остановка Sayuri
+   ↓
+backup code + SQLite
+   ↓
+fast-forward exact target SHA
+   ↓
+isolated verification
+   ↓
+restart + health/version gate
+   ↓
+SUCCESS
+       или
+rollback code + SQLite
+```
 
-- task_id;
-- status;
-- payload;
-- next_action;
-- created_at;
-- updated_at.
+Helper отделён от основного процесса, потому что работающий процесс не должен заменять файлы, из которых сам выполняется.
 
-После перезапуска Recovery Service находит незавершённые контрольные точки и сообщает о них через API и событие core.recovery.available.
+## Backup и rollback
 
-Важно: v0.2.0 не повторяет произвольные действия автоматически. Восстановление возвращает контекст и next_action, а фактическое продолжение в будущем должно проходить через систему разрешений и брокер действий.
+Перед apply helper создаёт:
 
-## Фоновые задачи
+- ZIP-архив tracked-состояния `before_sha`;
+- консистентные SQLite snapshots через `sqlite3.Connection.backup`;
+- manifest списка production-БД.
 
-Job Manager использует ограниченный пул потоков. Состояния pending и running, оставшиеся после аварийного завершения процесса, при следующем старте переводятся в interrupted.
+Post-update verification использует отдельный временный `SAYURI_DATA_DIR`, поэтому тестовые миграции не касаются production data.
 
-Это предотвращает ложное отображение задачи как продолжающей выполняться после перезапуска.
+Если проверка/перезапуск новой версии не проходит, helper:
 
-## Интерфейс ядра
+1. убеждается, что Git worktree всё ещё чистый;
+2. откатывает tracked-код к записанному `before_sha`;
+3. удаляет SQLite-БД, созданные только неудачной новой версией;
+4. очищает `-wal`, `-shm`, `-journal`;
+5. восстанавливает SQLite snapshots;
+6. запускает предыдущую версию;
+7. проверяет identity и ожидаемую версию.
 
-Будущие модули должны получать CoreAPI вместо прямого доступа к внутренним объектам ядра.
-
-CoreAPI предоставляет:
-
-- состояние ядра;
-- чтение конфигурации;
-- публикацию событий;
-- запуск фоновой задачи;
-- сохранение и завершение контрольной точки;
-- получение списка восстанавливаемых задач.
-
-## База данных
-
-Миграция схемы 2 добавляет:
-
-- core_services;
-- core_jobs;
-- checkpoints.
-
-Существующая схема модулей и журнал событий сохраняются.
+Если worktree стал dirty после apply, destructive rollback блокируется, а backup сохраняется для ручного восстановления.
 
 ## HTTP API
 
-- GET /api/health
-- GET /api/system
-- GET /api/core
-- GET /api/core/jobs
-- GET /api/core/recovery
-- GET /api/modules
+Read/status:
 
-Все HTTP-интерфейсы по умолчанию остаются привязанными только к 127.0.0.1.
+- `GET /api/health`
+- `GET /api/system`
+- `GET /api/core`
+- `GET /api/core/jobs`
+- `GET /api/core/recovery`
+- `GET /api/update/status`
+- `GET /api/cognitive`
+- `GET /api/cognitive/sessions`
+- `GET /api/modules`
 
+Управление обновлением:
 
-## Стабилизация v0.2.1
+- `POST /api/update/check`
+- `POST /api/update/apply`
 
-- HTTP bind failure закрывает уже запущенные службы через гарантированный finally.
-- Tray использует токенизированный локальный POST /api/shutdown для мягкой остановки; Kill остаётся аварийным fallback.
-- /api/health использует лёгкий status и не выполняет SQLite quick_check.
-- JobManager освобождает futures и хранит ограниченную историю завершённых задач.
-- SQLite journal policy автоматически переключается на DELETE для OneDrive, сетевых и съёмных путей.
-- Переменная SAYURI_DATA_DIR позволяет хранить runtime data вне синхронизируемой папки.
-- Переменная SAYURI_SQLITE_JOURNAL_MODE позволяет явно выбрать WAL или DELETE.
-- Git updater следует configured upstream текущей ветки.
-- Python version metadata централизована в src/sayuri_yukishiro/version.py.
+Мягкая остановка:
+
+- `POST /api/shutdown`
+
+HTTP-сервер привязан к `127.0.0.1`. Дополнительно проверяются loopback client и loopback Host. Управляющий token обновлений генерируется отдельно от shutdown-token.
+
+## Windows tray
+
+Tray содержит пункт **«Обновления проекта»**. Он запускает ту же проверку через локальный API и открывает встроенную страницу `/#updates`.
+
+После helper-restart tray принимает новый PID только от health endpoint, который подтверждает `project = Sayuri Yukishiro`.
+
+## Проверка процесса
+
+Общий `process_alive` используется update lifecycle:
+
+- Windows: `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `GetExitCodeProcess == STILL_ACTIVE`;
+- POSIX: signal 0 с корректной обработкой отсутствия процесса и permission error.
+
+## Checkpoints и Recovery
+
+Незавершённые обычные задачи сохраняют `task_id`, `payload`, `next_action` и timestamps. Recovery возвращает контекст, но не повторяет произвольные действия автоматически.
+
+## База данных
+
+Текущая центральная SQLite schema — v3. Системные и когнитивные данные продолжают храниться в центральной БД, будущие модули получают собственные БД.
+
+## Граница CoreAPI
+
+Будущие функциональные модули получают ограниченный `CoreAPI` для статуса, конфигурации, событий, фоновых задач и checkpoints. Привилегированные операции UpdateService через этот API не экспортируются.
