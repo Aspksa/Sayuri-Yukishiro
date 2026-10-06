@@ -1,95 +1,39 @@
 # Sayuri Yukishiro
 
-**Текущий релиз:** v0.3.0  
-**Системное ядро:** v0.2.0  
+**Текущий релиз:** v0.3.1  
+**Системное ядро:** v0.2.1  
 **Когнитивное ядро:** v0.3.0  
 **Следующая разработка:** v0.4.0
 
 Sayuri Yukishiro — модульная персональная AI-платформа.
 
+## Стабилизация v0.3.1
+
+- BAT больше не передаёт опасный путь `%~dp0` через `-Root`.
+- Ошибка bind корректно останавливает системное и когнитивное ядра.
+- Windows tray сначала выполняет мягкое завершение через токенизированный `POST /api/shutdown`; принудительный Kill — только fallback.
+- SQLite использует `DELETE` на OneDrive, сетевых и съёмных путях и `WAL` на безопасном локальном диске.
+- Runtime data можно вынести через `SAYURI_DATA_DIR`.
+- JobManager ограничивает историю и освобождает завершённые futures.
+- `/api/health` больше не запускает `quick_check` на каждом polling.
+- Git updater следует upstream текущей ветки вместо жёсткого `origin/main`.
+- Версия интерфейса читается из `VERSION`, Python metadata централизована в `version.py`.
+- PowerShell launcher не использует автоматическую переменную `$args`.
+
 ## Когнитивное ядро v0.3.0
 
-Когнитивное ядро организует рабочий цикл Sayuri:
+Контекст, намерение, цели, планирование, Capability Registry, Execution Gate, evidence receipts, verification, confidence, contradictions, persistence и recovery.
 
-- когнитивный контекст;
-- анализ намерения;
-- постановка цели;
-- многошаговый план;
-- зависимости шагов;
-- реестр способностей;
-- контроль риска перед выполнением;
-- квитанции и доказательства шагов;
-- проверка результата;
-- оценка уверенности;
-- обнаружение противоречий;
-- долговечное состояние сессии;
-- восстановление через checkpoint и next_action;
-- нейтральный ReasoningProvider для будущей LLM.
+## Системное ядро v0.2.1
 
-По умолчанию внешняя LLM не требуется: используется NullReasoningProvider.
-
-Безопасность: автоматически разрешены только READ_ONLY способности. MUTATION и EXTERNAL блокируются до появления отдельного Action Broker.
-
-Подробности: docs/COGNITIVE_CORE.md.
-
-## Системное ядро v0.2.0
-
-Системное ядро отвечает за:
-
-- жизненный цикл служб;
-- конфигурацию;
-- журналирование;
-- Event Bus;
-- фоновые задачи;
-- health;
-- checkpoints;
-- recovery;
-- CoreAPI.
-
-Подробности: docs/SYSTEM_CORE.md.
-
-## Обязательный протокол обновлений
-
-Каждое изменение регулируется:
-
-- AGENTS.md
-- docs/UPDATE_PROTOCOL.md
-- UPDATE_IDS.json
-- UPDATE_LOG.md
-- PROJECT_STATE.json
-
-Последовательность:
-
-task -> ID -> change -> check -> version -> journal -> commit -> next_action
+Lifecycle служб, конфигурация, logging, Event Bus, фоновые задачи, health, checkpoints, recovery и CoreAPI.
 
 ## Запуск
 
-Запустите Sayuri-Yukishiro.bat.
+Запустите `Sayuri-Yukishiro.bat`.
 
-Локальный адрес:
-
-http://127.0.0.1:8765
-
-## Локальный API
-
-- GET /api/health
-- GET /api/system
-- GET /api/core
-- GET /api/core/jobs
-- GET /api/core/recovery
-- GET /api/cognitive
-- GET /api/cognitive/sessions
-- GET /api/modules
-
-## Хранилище
-
-SQLite schema v3 включает системные службы, задания, checkpoints, cognitive_sessions и cognitive_receipts.
-
-- data/core/sayuri_yukishiro.db — системное и когнитивное состояние.
-- data/modules/<module_id>.db — отдельные базы будущих модулей.
-- data/logs/ — журналы.
-- data/cache/ — временные данные.
+Локальный адрес: `http://127.0.0.1:8765`.
 
 ## Следующий этап
 
-v0.4.0 — система модулей и их жизненный цикл. После неё реальные возможности модулей будут регистрироваться в CapabilityRegistry когнитивного ядра через контролируемые интерфейсы.
+v0.4.0 — система модулей и их жизненный цикл.

@@ -176,45 +176,45 @@ next_action: v0.4.0 — Система модулей и их жизненный
 
 Дата: 2026-10-07
 
-Статус: in_progress
+Статус: completed
 
 Изменения:
 
-- CHG-0047 / BUG-0007 — BAT передаёт -Root "%~dp0"; завершающий обратный слэш может нарушить разбор следующего аргумента Windows.
-- CHG-0048 / FIX-0007 -> BUG-0007 — BAT перестаёт передавать Root; launcher вычисляет корень через PSScriptRoot.
-- CHG-0049 / BUG-0008 — при ошибке bind HTTP-порта системное и когнитивное ядра уже запущены, но их stop() не вызывается.
-- CHG-0050 / FIX-0008 -> BUG-0008 — жизненный цикл serve() закрывает оба ядра и частично созданный сервер при любой ошибке запуска.
-- CHG-0051 / BUG-0009 — tray завершает Python через Kill(), обходя stop(), checkpoints и финальное журналирование.
-- CHG-0052 / FIX-0009 -> BUG-0009 — добавляется аутентифицированная локальная мягкая остановка; Kill остаётся только аварийным fallback после таймаута.
-- CHG-0053 / BUG-0010 — SQLite WAL безусловно включён даже на синхронизируемых, сетевых и потенциально съёмных путях.
-- CHG-0054 / FIX-0010 -> BUG-0010 — политика SQLite выбирает DELETE для небезопасного/синхронизируемого хранения и WAL только для локального безопасного пути; режим можно явно переопределить.
-- CHG-0055 / BUG-0011 — JobManager бесконечно удерживает завершённые jobs и futures в памяти.
-- CHG-0056 / FIX-0011 -> BUG-0011 — futures удаляются после завершения, история jobs становится ограниченной.
-- CHG-0057 / BUG-0012 — /api/health вызывает SQLite quick_check через полный status при каждом polling.
-- CHG-0058 / FIX-0012 -> BUG-0012 — health становится лёгким; глубокий quick_check выполняется только в диагностике/полном системном статусе.
-- CHG-0059 / BUG-0013 — updater жёстко обновляет origin/main независимо от текущей отслеживаемой ветки.
-- CHG-0060 / FIX-0013 -> BUG-0013 — updater определяет текущий upstream и fast-forward только его; detached/no-upstream безопасно пропускаются.
-- CHG-0061 / BUG-0014 — BAT и tray показывают устаревшую версию v0.1.0.
+- CHG-0047 / BUG-0007 — BAT передавал -Root "%~dp0", что создавало риск некорректного разбора завершающего обратного слэша.
+- CHG-0048 / FIX-0007 -> BUG-0007 — BAT больше не передаёт Root; launcher вычисляет корень через PSScriptRoot.
+- CHG-0049 / BUG-0008 — при ошибке bind HTTP-порта запущенные ядра могли остаться без stop().
+- CHG-0050 / FIX-0008 -> BUG-0008 — serve() гарантированно закрывает сервер, когнитивное и системное ядра через finally.
+- CHG-0051 / BUG-0009 — tray завершал Python через Kill(), обходя штатный lifecycle.
+- CHG-0052 / FIX-0009 -> BUG-0009 — добавлен локальный токенизированный POST /api/shutdown; Kill используется только как аварийный fallback после таймаута.
+- CHG-0053 / BUG-0010 — SQLite WAL включался без учёта OneDrive, сетевых и съёмных путей.
+- CHG-0054 / FIX-0010 -> BUG-0010 — введена storage policy: DELETE для синхронизируемых/сетевых/съёмных путей, WAL для безопасного локального диска; поддержаны SAYURI_DATA_DIR и SAYURI_SQLITE_JOURNAL_MODE.
+- CHG-0055 / BUG-0011 — JobManager бесконечно удерживал завершённые jobs и futures.
+- CHG-0056 / FIX-0011 -> BUG-0011 — futures освобождаются после завершения, история jobs ограничена job_history_limit.
+- CHG-0057 / BUG-0012 — /api/health запускал SQLite quick_check при каждом polling.
+- CHG-0058 / FIX-0012 -> BUG-0012 — обычный status лёгкий; quick_check выполняется только в deep-status и диагностике.
+- CHG-0059 / BUG-0013 — updater всегда использовал origin/main.
+- CHG-0060 / FIX-0013 -> BUG-0013 — updater определяет configured upstream текущей ветки и обновляет только его.
+- CHG-0061 / BUG-0014 — BAT и tray показывали устаревшую версию v0.1.0.
 - CHG-0062 / FIX-0014 -> BUG-0014 — пользовательские подписи версии читаются из VERSION.
-- CHG-0063 / BUG-0015 — версии проекта/ядер продублированы в нескольких Python-файлах и могут расходиться.
-- CHG-0064 / FIX-0015 -> BUG-0015 — вводится единый Python-источник version metadata, связанный с VERSION.
-- CHG-0065 / BUG-0016 — launcher.ps1 использует имя $args, конфликтующее с автоматической переменной PowerShell.
-- CHG-0066 / FIX-0016 -> BUG-0016 — локальные массивы аргументов переименовываются в безопасные имена cliArgs/processArgs.
+- CHG-0063 / BUG-0015 — версии проекта и ядер дублировались по Python-файлам.
+- CHG-0064 / FIX-0015 -> BUG-0015 — введён единый src/sayuri_yukishiro/version.py; системное ядро обновлено до v0.2.1.
+- CHG-0065 / BUG-0016 — launcher.ps1 присваивал автоматической переменной PowerShell $args.
+- CHG-0066 / FIX-0016 -> BUG-0016 — локальные массивы аргументов переименованы в cliArgs/processArgs.
 
 Проверки:
 
-- tests: PENDING
+- tests: PASS
 - lint: NOT_CONFIGURED
 - type-check: NOT_CONFIGURED
-- smoke-test: PENDING
-- protocol-validation: PENDING
-- python-compile: PENDING
-- powershell-syntax: PENDING
+- smoke-test: PASS
+- protocol-validation: PASS
+- python-compile: PASS
+- powershell-syntax: PASS
 
 Commit:
 
-PENDING_AFTER_IMPLEMENTATION_CHECKS
+72afefdb47abd263ed4615f8ae63c4da37ee829a
 
 Следующий шаг:
 
-next_action: исправить десять дефектов стабильности v0.3.1, добавить regression tests и выполнить полный Foundation Smoke.
+next_action: v0.4.0 — Система модулей и их жизненный цикл: manifests, discovery, dependency graph, permissions, migrations, health-check, controlled startup/shutdown и регистрация способностей модулей в когнитивном ядре.

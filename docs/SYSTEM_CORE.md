@@ -1,4 +1,4 @@
-# Системное ядро Sayuri Yukishiro — v0.2.0
+# Системное ядро Sayuri Yukishiro — v0.2.1
 
 ## Назначение
 
@@ -82,3 +82,16 @@ CoreAPI предоставляет:
 - GET /api/modules
 
 Все HTTP-интерфейсы по умолчанию остаются привязанными только к 127.0.0.1.
+
+
+## Стабилизация v0.2.1
+
+- HTTP bind failure закрывает уже запущенные службы через гарантированный finally.
+- Tray использует токенизированный локальный POST /api/shutdown для мягкой остановки; Kill остаётся аварийным fallback.
+- /api/health использует лёгкий status и не выполняет SQLite quick_check.
+- JobManager освобождает futures и хранит ограниченную историю завершённых задач.
+- SQLite journal policy автоматически переключается на DELETE для OneDrive, сетевых и съёмных путей.
+- Переменная SAYURI_DATA_DIR позволяет хранить runtime data вне синхронизируемой папки.
+- Переменная SAYURI_SQLITE_JOURNAL_MODE позволяет явно выбрать WAL или DELETE.
+- Git updater следует configured upstream текущей ветки.
+- Python version metadata централизована в src/sayuri_yukishiro/version.py.

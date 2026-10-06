@@ -2,11 +2,11 @@
   "schema_version": 2,
   "project": "Sayuri Yukishiro",
   "repository": "Aspksa/Sayuri-Yukishiro",
-  "version": "0.3.0",
-  "development_version": "0.3.1",
-  "core_version": "0.2.0",
+  "version": "0.3.1",
+  "development_version": "0.4.0",
+  "core_version": "0.2.1",
   "stage": "core-stability",
-  "status": "in_progress",
+  "status": "completed",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -19,7 +19,8 @@
     "web_shell": "Python standard library HTTP server",
     "core_database": "data/core/sayuri_yukishiro.db",
     "module_databases": "data/modules/<module_id>.db",
-    "auto_update": "git fetch + fast-forward only when worktree is clean"
+    "auto_update": "configured upstream + fast-forward only when worktree is clean",
+    "data_directory": "project data/ by default; SAYURI_DATA_DIR may relocate runtime data"
   },
   "update_protocol": {
     "required": true,
@@ -39,11 +40,13 @@
     "no_hardcoded_drive_letter": true,
     "no_forced_git_reset": true,
     "no_update_over_local_changes": true,
-    "bind_localhost_only": true
+    "bind_localhost_only": true,
+    "graceful_shutdown": "localhost tokenized POST /api/shutdown with Kill fallback only after timeout",
+    "sqlite_journal_policy": "WAL on safe local storage; DELETE on OneDrive/network/removable storage"
   },
-  "next_action": "v0.3.1 Core Stability: fix launcher argument safety, bind cleanup, graceful shutdown, SQLite journal policy, job retention, lightweight health, upstream-aware updates, version drift, and PowerShell automatic-variable collision.",
+  "next_action": "v0.4.0 Module Runtime & Lifecycle: add manifests, discovery, dependency graph, permissions, migrations, health checks, controlled startup/shutdown, and capability registration into the Cognitive Core.",
   "system_core": {
-    "version": "0.2.0",
+    "version": "0.2.1",
     "services": [
       "configuration",
       "logging",
@@ -54,7 +57,9 @@
     ],
     "database_schema": 2,
     "api": "CoreAPI",
-    "recovery_policy": "restore context and next_action without automatic replay of arbitrary actions"
+    "recovery_policy": "restore context and next_action without automatic replay of arbitrary actions",
+    "job_history_limit": 500,
+    "health_policy": "lightweight polling; SQLite quick_check only on deep diagnostics"
   },
   "cognitive_core_version": "0.3.0",
   "cognitive_core": {
