@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 from .paths import CORE_DATA_DIR, MODULE_DATA_DIR, ensure_runtime_dirs
 
@@ -16,6 +16,10 @@ _SAFE_MODULE_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _json_text(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, default=repr)
 
 
 class CoreDatabase:
@@ -116,11 +120,13 @@ class CoreDatabase:
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)",
                 (utc_now(),),
             )
+            self._apply_system_core_schema(conn)
+
             now = utc_now()
             conn.execute(
                 """
                 INSERT INTO modules(id, name, version, status, db_path, created_at, updated_at)
-                VALUES('core', 'Sayuri Yukishiro Core', '0.1.0', 'active', ?, ?, ?)
+                VALUES('core', 'Sayuri Yukishiro Core', '0.2.0', 'active', ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     version=excluded.version,
@@ -130,6 +136,47 @@ class CoreDatabase:
                 """,
                 (str(self.path), now, now),
             )
+
+    def _apply_system_core_schema(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS core_services (
+                name TEXT PRIMARY KEY,
+                state TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS core_jobs (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                result_json TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_core_jobs_status
+                ON core_jobs(status, updated_at);
+
+            CREATE TABLE IF NOT EXISTS checkpoints (
+                task_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                next_action TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_checkpoints_status
+                ON checkpoints(status, updated_at);
+            """
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(2, ?)",
+            (utc_now(),),
+        )
 
     def quick_check(self) -> str:
         with self.session() as conn:
@@ -165,21 +212,140 @@ class CoreDatabase:
         with self.session() as conn:
             conn.execute(
                 "INSERT INTO events(module_id, event_type, payload_json, created_at) VALUES(?, ?, ?, ?)",
-                (module_id, event_type, json.dumps(payload, ensure_ascii=False), utc_now()),
+                (module_id, event_type, _json_text(payload), utc_now()),
             )
 
-    def audit(self, actor: str, action: str, target: str | None = None, details: dict | None = None) -> None:
+    def audit(
+        self,
+        actor: str,
+        action: str,
+        target: str | None = None,
+        details: dict | None = None,
+    ) -> None:
         with self.session() as conn:
             conn.execute(
                 "INSERT INTO audit_log(actor, action, target, details_json, created_at) VALUES(?, ?, ?, ?, ?)",
-                (
-                    actor,
-                    action,
-                    target,
-                    json.dumps(details or {}, ensure_ascii=False),
-                    utc_now(),
-                ),
+                (actor, action, target, _json_text(details or {}), utc_now()),
             )
+
+    def upsert_service_state(self, name: str, state: str, detail: str = "") -> None:
+        with self.session() as conn:
+            conn.execute(
+                """
+                INSERT INTO core_services(name, state, detail, updated_at)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    state=excluded.state,
+                    detail=excluded.detail,
+                    updated_at=excluded.updated_at
+                """,
+                (name, state, detail, utc_now()),
+            )
+
+    def list_service_states(self) -> list[dict[str, Any]]:
+        with self.session() as conn:
+            rows = conn.execute(
+                "SELECT name, state, detail, updated_at FROM core_services ORDER BY name"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def create_core_job(self, job_id: str, name: str, status: str) -> None:
+        now = utc_now()
+        with self.session() as conn:
+            conn.execute(
+                """
+                INSERT INTO core_jobs(id, name, status, created_at, updated_at)
+                VALUES(?, ?, ?, ?, ?)
+                """,
+                (job_id, name, status, now, now),
+            )
+
+    def update_core_job(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        result: Any = None,
+        error: str | None = None,
+    ) -> None:
+        with self.session() as conn:
+            conn.execute(
+                """
+                UPDATE core_jobs
+                SET status=?, result_json=?, error=?, updated_at=?
+                WHERE id=?
+                """,
+                (status, _json_text(result) if result is not None else None, error, utc_now(), job_id),
+            )
+
+    def mark_unfinished_jobs_interrupted(self) -> int:
+        with self.session() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE core_jobs
+                SET status='interrupted', updated_at=?
+                WHERE status IN ('pending', 'running')
+                """,
+                (utc_now(),),
+            )
+            return int(cursor.rowcount)
+
+    def save_checkpoint(
+        self,
+        task_id: str,
+        status: str,
+        payload: dict[str, Any],
+        next_action: str,
+    ) -> None:
+        now = utc_now()
+        with self.session() as conn:
+            conn.execute(
+                """
+                INSERT INTO checkpoints(
+                    task_id, status, payload_json, next_action, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    status=excluded.status,
+                    payload_json=excluded.payload_json,
+                    next_action=excluded.next_action,
+                    updated_at=excluded.updated_at
+                """,
+                (task_id, status, _json_text(payload), next_action, now, now),
+            )
+
+    def get_checkpoint(self, task_id: str) -> dict[str, Any] | None:
+        with self.session() as conn:
+            row = conn.execute(
+                """
+                SELECT task_id, status, payload_json, next_action, created_at, updated_at
+                FROM checkpoints
+                WHERE task_id=?
+                """,
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            return item
+
+    def list_recoverable_checkpoints(self) -> list[dict[str, Any]]:
+        with self.session() as conn:
+            rows = conn.execute(
+                """
+                SELECT task_id, status, payload_json, next_action, created_at, updated_at
+                FROM checkpoints
+                WHERE status != 'completed'
+                ORDER BY updated_at DESC
+                """
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                item["payload"] = json.loads(item.pop("payload_json"))
+                result.append(item)
+            return result
 
 
 def module_database_path(module_id: str) -> Path:

@@ -3,9 +3,11 @@ from __future__ import annotations
 import shutil
 import socket
 import sys
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .core.runtime import SystemCore
 from .database import CoreDatabase
 from .paths import DATA_DIR, PROJECT_ROOT, ensure_runtime_dirs
 
@@ -58,11 +60,44 @@ def _check_database() -> Check:
         return Check("database", False, "fatal", f"SQLite initialization failed: {exc}")
 
 
+def _check_system_core() -> Check:
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = CoreDatabase(root / "core-smoke.db")
+            core = SystemCore(
+                db=db,
+                config_path=root / "system.json",
+                log_dir=root / "logs",
+            )
+            core.start()
+            status = core.status()
+            core.stop()
+        healthy = status["health"]["overall"] == "healthy"
+        return Check(
+            "system_core",
+            healthy,
+            "fatal" if not healthy else "info",
+            (
+                f"Core {status['core_version']}; "
+                f"services={status['health']['healthy_count']}/"
+                f"{status['health']['service_count']}"
+            ),
+        )
+    except Exception as exc:
+        return Check("system_core", False, "fatal", f"System core failed: {exc}")
+
+
 def _check_git() -> Check:
     git = shutil.which("git")
     if git:
         return Check("git", True, "info", f"Git available: {git}")
-    return Check("git", False, "warning", "Git not found. Runtime can start, but Git auto-update is unavailable.")
+    return Check(
+        "git",
+        False,
+        "warning",
+        "Git not found. Runtime can start, but Git auto-update is unavailable.",
+    )
 
 
 def _check_port(port: int) -> Check:
@@ -85,6 +120,7 @@ def run_diagnostics(port: int = 8765) -> list[Check]:
         _check_python(),
         _check_paths(),
         _check_database(),
+        _check_system_core(),
         _check_git(),
         _check_port(port),
     ]

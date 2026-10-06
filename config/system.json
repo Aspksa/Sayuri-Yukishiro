@@ -1,0 +1,11 @@
+{
+  "core": {
+    "max_workers": 4,
+    "recovery_enabled": true
+  },
+  "logging": {
+    "level": "INFO",
+    "max_bytes": 2000000,
+    "backup_count": 3
+  }
+}

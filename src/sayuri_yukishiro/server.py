@@ -5,10 +5,9 @@ import mimetypes
 import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import urlparse
 
-from .database import CoreDatabase
+from .core.runtime import SystemCore
 from .paths import WEB_DIR, project_version
 
 
@@ -16,13 +15,13 @@ class SayuriHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, server_address: tuple[str, int], db: CoreDatabase):
-        self.db = db
+    def __init__(self, server_address: tuple[str, int], core: SystemCore):
+        self.core = core
         super().__init__(server_address, SayuriHandler)
 
 
 class SayuriHandler(BaseHTTPRequestHandler):
-    server_version = "SayuriYukishiro/0.1.0"
+    server_version = "SayuriYukishiro/0.2.0"
 
     @property
     def app_server(self) -> SayuriHTTPServer:
@@ -60,30 +59,50 @@ class SayuriHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        core = self.app_server.core
 
         if path == "/api/health":
+            status = core.status()
+            overall = status["health"]["overall"]
             self._json(
                 {
-                    "status": "ok",
+                    "status": "ok" if overall == "healthy" else overall,
                     "project": "Sayuri Yukishiro",
                     "version": project_version(),
+                    "core_version": status["core_version"],
                     "pid": os.getpid(),
                 }
             )
             return
 
+        if path == "/api/core":
+            self._json(core.status())
+            return
+
+        if path == "/api/core/recovery":
+            self._json({"tasks": core.api.recoverable_tasks()})
+            return
+
+        if path == "/api/core/jobs":
+            self._json({"jobs": core.jobs.snapshot()})
+            return
+
         if path == "/api/modules":
-            self._json({"modules": self.app_server.db.list_modules()})
+            self._json({"modules": core.db.list_modules()})
             return
 
         if path == "/api/system":
+            core_status = core.status()
             self._json(
                 {
                     "project": "Sayuri Yukishiro",
                     "version": project_version(),
-                    "database": str(self.app_server.db.path),
-                    "database_check": self.app_server.db.quick_check(),
-                    "module_count": len(self.app_server.db.list_modules()),
+                    "core_version": core_status["core_version"],
+                    "core_health": core_status["health"]["overall"],
+                    "database": str(core.db.path),
+                    "database_check": core_status["database_check"],
+                    "module_count": len(core.db.list_modules()),
+                    "recoverable_tasks": core_status["recoverable_tasks"],
                 }
             )
             return
@@ -96,14 +115,15 @@ class SayuriHandler(BaseHTTPRequestHandler):
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
-    db = CoreDatabase()
-    db.initialize()
-    db.append_event("core.start", {"host": host, "port": port}, module_id="core")
-
-    server = SayuriHTTPServer((host, port), db)
-    print(f"Sayuri Yukishiro {project_version()} listening on http://{host}:{port}")
+    core = SystemCore()
+    core.start()
+    server = SayuriHTTPServer((host, port), core)
+    print(
+        f"Sayuri Yukishiro {project_version()} / core {core.CORE_VERSION} "
+        f"listening on http://{host}:{port}"
+    )
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
-        db.append_event("core.stop", {"host": host, "port": port}, module_id="core")
         server.server_close()
+        core.stop()
