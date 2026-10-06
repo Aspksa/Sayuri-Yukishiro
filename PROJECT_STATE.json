@@ -5,8 +5,8 @@
   "version": "0.1.1",
   "development_version": "0.2.0",
   "core_version": "0.1.0",
-  "stage": "update-governance",
-  "status": "completed",
+  "stage": "system-core",
+  "status": "in_progress",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -41,5 +41,6 @@
     "no_update_over_local_changes": true,
     "bind_localhost_only": true
   },
-  "next_action": "v0.2.0 Module Runtime & Lifecycle: add manifests, module discovery, dependency validation, permissions, migrations, health checks, and controlled startup/shutdown."
+  "next_action": "v0.2.0 System Core: implement service lifecycle, event bus, job manager, configuration, logging, health, checkpoints, recovery, and core API facade.",
+  "core_development_version": "0.2.0"
 }

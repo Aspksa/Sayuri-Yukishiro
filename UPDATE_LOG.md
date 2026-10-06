@@ -81,3 +81,44 @@ Commit:
 Следующий шаг:
 
 next_action: v0.2.0 — Module Runtime & Lifecycle: manifests, discovery, dependencies, permissions, migrations, health checks and controlled startup/shutdown.
+
+
+---
+
+## v0.2.0
+
+Дата: 2026-10-07
+
+Статус: in_progress
+
+Изменения:
+
+- CHG-0020 / ARCH-0003 — системное ядро выделяется в отдельный слой между запуском проекта и будущими модулями.
+- CHG-0021 / FEAT-0007 — добавляется реестр служб и управляемый жизненный цикл служб ядра.
+- CHG-0022 / FEAT-0008 — добавляется внутренняя шина событий ядра.
+- CHG-0023 / FEAT-0009 — добавляется диспетчер фоновых задач ядра.
+- CHG-0024 / FEAT-0010 — добавляется единая служба конфигурации.
+- CHG-0025 / FEAT-0011 — добавляется структурированное журналирование ядра.
+- CHG-0026 / FEAT-0012 — добавляется контроль состояния служб и агрегированная диагностика.
+- CHG-0027 / FEAT-0013 — добавляются долговечные контрольные точки задач.
+- CHG-0028 / FEAT-0014 — добавляется восстановление незавершённой работы после перезапуска.
+- CHG-0029 / ARCH-0004 — вводится единый интерфейс системного ядра для будущих модулей.
+- CHG-0030 / IMP-0002 — расширяется диагностика и HTTP API сведениями о системном ядре.
+
+Проверки:
+
+- tests: PENDING
+- lint: NOT_CONFIGURED
+- type-check: NOT_CONFIGURED
+- smoke-test: PENDING
+- protocol-validation: PENDING
+- python-compile: PENDING
+- powershell-syntax: PENDING
+
+Commit:
+
+PENDING_AFTER_IMPLEMENTATION_CHECKS
+
+Следующий шаг:
+
+next_action: реализовать системное ядро v0.2.0, выполнить полный Foundation Smoke и финализировать релиз.
