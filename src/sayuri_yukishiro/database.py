@@ -31,8 +31,20 @@ class CoreDatabase:
         conn.execute("PRAGMA synchronous = NORMAL")
         return conn
 
+    @contextmanager
+    def session(self) -> Iterator[sqlite3.Connection]:
+        conn = self.connect()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def initialize(self) -> None:
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -120,12 +132,12 @@ class CoreDatabase:
             )
 
     def quick_check(self) -> str:
-        with self.connect() as conn:
+        with self.session() as conn:
             row = conn.execute("PRAGMA quick_check").fetchone()
             return str(row[0]) if row else "unknown"
 
     def list_modules(self) -> list[dict]:
-        with self.connect() as conn:
+        with self.session() as conn:
             rows = conn.execute(
                 "SELECT id, name, version, status, db_path, updated_at FROM modules ORDER BY id"
             ).fetchall()
@@ -134,7 +146,7 @@ class CoreDatabase:
     def register_module(self, module_id: str, name: str, version: str) -> Path:
         module_path = module_database_path(module_id)
         now = utc_now()
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 """
                 INSERT INTO modules(id, name, version, status, db_path, created_at, updated_at)
@@ -150,14 +162,14 @@ class CoreDatabase:
         return module_path
 
     def append_event(self, event_type: str, payload: dict, module_id: str | None = None) -> None:
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 "INSERT INTO events(module_id, event_type, payload_json, created_at) VALUES(?, ?, ?, ?)",
                 (module_id, event_type, json.dumps(payload, ensure_ascii=False), utc_now()),
             )
 
     def audit(self, actor: str, action: str, target: str | None = None, details: dict | None = None) -> None:
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 "INSERT INTO audit_log(actor, action, target, details_json, created_at) VALUES(?, ?, ?, ?, ?)",
                 (
