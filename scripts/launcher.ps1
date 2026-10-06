@@ -2,7 +2,8 @@ param(
     [string]$Root = "",
     [switch]$PreflightOnly,
     [switch]$TrayHost,
-    [switch]$SkipPreflight
+    [switch]$SkipPreflight,
+    [switch]$NoUpdate
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,7 @@ if ([string]::IsNullOrWhiteSpace($Root)) {
 $Root = (Resolve-Path $Root).Path
 $SourceRoot = Join-Path $Root "src"
 $env:PYTHONPATH = $SourceRoot
+$script:SayuriExitCode = 0
 
 function Resolve-SayuriPython {
     $portable = Join-Path $Root "runtime\python\python.exe"
@@ -45,7 +47,7 @@ function Invoke-Sayuri {
 
     $allArgs = @($Python.Prefix) + @("-m", "sayuri_yukishiro.main") + $Arguments
     & $Python.Exe @allArgs
-    return $LASTEXITCODE
+    $script:SayuriExitCode = $LASTEXITCODE
 }
 
 function Start-SayuriCore {
@@ -86,15 +88,24 @@ function Test-SayuriHealth {
     }
 }
 
+function Run-Preflight {
+    $args = @("--preflight")
+    if ($NoUpdate) {
+        $args += "--no-update"
+    }
+    Invoke-Sayuri -Arguments $args
+    return $script:SayuriExitCode
+}
+
 if ($PreflightOnly) {
-    $code = Invoke-Sayuri -Arguments @("--preflight")
-    exit $code
+    Run-Preflight | Out-Null
+    exit $script:SayuriExitCode
 }
 
 if (-not $SkipPreflight) {
-    $code = Invoke-Sayuri -Arguments @("--preflight")
-    if ($code -ne 0) {
-        exit $code
+    Run-Preflight | Out-Null
+    if ($script:SayuriExitCode -ne 0) {
+        exit $script:SayuriExitCode
     }
 }
 
@@ -151,6 +162,11 @@ $diagnosticsItem = $menu.Items.Add("Диагностика")
 $restartItem = $menu.Items.Add("Перезапустить ядро")
 $exitItem = $menu.Items.Add("Выход")
 
+if (-not $script:OwnsCore) {
+    $restartItem.Enabled = $false
+    $restartItem.ToolTipText = "Это окно трея не запускало текущее ядро."
+}
+
 $openAction = {
     Start-Process $url
 }
@@ -161,23 +177,32 @@ $diagnosticsAction = {
         "-ExecutionPolicy", "Bypass",
         "-File", (Join-Path $Root "scripts\launcher.ps1"),
         "-Root", $Root,
-        "-PreflightOnly"
+        "-PreflightOnly",
+        "-NoUpdate"
     )
     Start-Process "powershell.exe" -ArgumentList $args
 }
 
 $restartAction = {
-    if ($script:OwnsCore -and $script:CoreProcess -and -not $script:CoreProcess.HasExited) {
+    if (-not $script:OwnsCore) {
+        return
+    }
+
+    if ($script:CoreProcess -and -not $script:CoreProcess.HasExited) {
         $script:CoreProcess.Kill()
         $script:CoreProcess.WaitForExit(5000) | Out-Null
     }
-    $script:CoreProcess = Start-SayuriCore
-    $script:OwnsCore = $true
 
+    $script:CoreProcess = Start-SayuriCore
     for ($i = 0; $i -lt 30; $i++) {
         Start-Sleep -Milliseconds 250
         if (Test-SayuriHealth) {
-            $notify.ShowBalloonTip(1500, "Sayuri Yukishiro", "Ядро перезапущено.", [System.Windows.Forms.ToolTipIcon]::Info)
+            $notify.ShowBalloonTip(
+                1500,
+                "Sayuri Yukishiro",
+                "Ядро перезапущено.",
+                [System.Windows.Forms.ToolTipIcon]::Info
+            )
             break
         }
     }
@@ -193,7 +218,12 @@ $restartItem.add_Click($restartAction)
 $exitItem.add_Click($exitAction)
 $notify.add_DoubleClick($openAction)
 $notify.ContextMenuStrip = $menu
-$notify.ShowBalloonTip(1200, "Sayuri Yukishiro", "Система запущена.", [System.Windows.Forms.ToolTipIcon]::Info)
+$notify.ShowBalloonTip(
+    1200,
+    "Sayuri Yukishiro",
+    "Система запущена.",
+    [System.Windows.Forms.ToolTipIcon]::Info
+)
 
 try {
     [System.Windows.Forms.Application]::Run()
