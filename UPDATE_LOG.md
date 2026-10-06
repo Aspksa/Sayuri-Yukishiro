@@ -276,6 +276,8 @@ next_action: v0.4.0 — Система модулей и их жизненный
 - CHG-0110 / FIX-0034 -> BUG-0034 — rollback удаляет SQLite БД, отсутствующие в backup manifest, и очищает -wal/-shm/-journal перед восстановлением snapshot.
 - CHG-0111 / BUG-0035 — helper считал restart успешным по project identity без проверки ожидаемой версии и мог принять чужой/старый экземпляр Sayuri.
 - CHG-0112 / FIX-0035 -> BUG-0035 — health-gate restart/rollback требует точного expected version вместе с status=ok и project identity.
+- CHG-0113 / BUG-0036 — Windows CI обнаружил IndentationError в _backup_databases после добавления production DB filtering.
+- CHG-0114 / FIX-0036 -> BUG-0036 — выравнивание блока destination/SQLite backup исправляется без изменения транзакционной логики.
 
 Проверки:
 
