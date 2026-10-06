@@ -1,6 +1,11 @@
-"""Sayuri Yukishiro package."""
+"""Пакет Sayuri Yukishiro."""
 
-from .version import COGNITIVE_CORE_VERSION, PROJECT_VERSION, SYSTEM_CORE_VERSION
+from .version import (
+    COGNITIVE_CORE_VERSION,
+    MODULE_RUNTIME_VERSION,
+    PROJECT_VERSION,
+    SYSTEM_CORE_VERSION,
+)
 
 __version__ = PROJECT_VERSION
 CORE_VERSION = SYSTEM_CORE_VERSION
@@ -9,4 +14,5 @@ __all__ = [
     "__version__",
     "CORE_VERSION",
     "COGNITIVE_CORE_VERSION",
+    "MODULE_RUNTIME_VERSION",
 ]
