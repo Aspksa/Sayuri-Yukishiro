@@ -252,6 +252,16 @@ next_action: v0.4.0 — Система модулей и их жизненный
 - CHG-0086 / FIX-0022 -> BUG-0022 — секция v0.4.0 полностью нормализована и содержит ровно по одной первичной записи каждого ID.
 - CHG-0087 / BUG-0023 — после helper-restart без постоянного tray-token web-страница могла сохранить старый control-token и получить 403 при следующей управляющей операции.
 - CHG-0088 / FIX-0023 -> BUG-0023 — после потери и восстановления соединения web-оболочка сбрасывает cached control-token и получает новый token у перезапущенного ядра.
+- CHG-0089 / BUG-0024 — post-update verification использовал production data и мог применить миграции БД до окончательного успеха; rollback откатывал код, но не данные.
+- CHG-0090 / FIX-0024 -> BUG-0024 — verification получает изолированный SAYURI_DATA_DIR; перед apply создаются SQLite backup-снимки production БД и при rollback они восстанавливаются.
+- CHG-0091 / BUG-0025 — если новое ядро запускалось, но не становилось healthy, helper мог начать rollback пока неудачный процесс ещё держал файлы и БД.
+- CHG-0092 / FIX-0025 -> BUG-0025 — restart гарантированно завершает неуспешный новый процесс до перехода к rollback.
+- CHG-0093 / BUG-0026 — control-token совпадал с shutdown-token, а HTTP Host не проверялся, что излишне связывало привилегии и оставляло поверхность для DNS rebinding.
+- CHG-0094 / FIX-0026 -> BUG-0026 — control-token становится отдельным секретом; API принимает только loopback Host/клиент для локальной оболочки.
+- CHG-0095 / BUG-0027 — после аварийного завершения update-helper persisted phase мог навсегда остаться busy и блокировать новые проверки.
+- CHG-0096 / FIX-0027 -> BUG-0027 — UpdateService при старте отличает живой helper от stale operation и переводит прерванное обновление в recoverable failed state.
+- CHG-0097 / BUG-0028 — tray после update-restart мог привязаться к любому процессу на порту, если тот имитировал /api/health.
+- CHG-0098 / FIX-0028 -> BUG-0028 — tray повторно захватывает PID только когда /api/health подтверждает project = Sayuri Yukishiro.
 
 Проверки:
 
