@@ -237,7 +237,7 @@ next_action: v0.4.0 — Система модулей и их жизненный
 - CHG-0071 / FEAT-0029 — добавляется отдельный update-helper: ожидание мягкой остановки, backup, fast-forward apply, post-update verification, rollback и restart.
 - CHG-0072 / FEAT-0030 — в системную web-оболочку добавляется встроенная страница «Обновления проекта» с проверкой, применением, прогрессом и журналом.
 - CHG-0073 / FEAT-0031 — в Windows tray добавляется пункт «Проверить обновления», использующий тот же API/страницу.
-- CHG-0074 / IMP-0004 — старое автоматическое изменение репозитория из preflight отключается; обновления имеют единый owner — UpdateService.
+- CHG-0074 / IMP-0004 — старое автоматическое изменение репозитория из preflight отключается; обновления имеют единый owner — UpdateService.\n- CHG-0075 / BUG-0017 — явный git fetch ветки мог обновить только FETCH_HEAD, оставив tracking-ref upstream устаревшим.\n- CHG-0076 / FIX-0017 -> BUG-0017 — fetch выполняется с явным refspec в refs/remotes/<remote>/<branch>, после чего UpdateService сравнивает свежий upstream SHA.
 
 Проверки:
 
