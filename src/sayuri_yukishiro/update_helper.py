@@ -131,15 +131,15 @@ class UpdateHelper:
             except ValueError:
                 continue
             destination = self.db_backup_dir / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                source_conn = sqlite3.connect(source, timeout=10)
-                target_conn = sqlite3.connect(destination, timeout=10)
-                try:
-                    source_conn.backup(target_conn)
-                finally:
-                    target_conn.close()
-                    source_conn.close()
-                backed_up.append(str(relative))
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            source_conn = sqlite3.connect(source, timeout=10)
+            target_conn = sqlite3.connect(destination, timeout=10)
+            try:
+                source_conn.backup(target_conn)
+            finally:
+                target_conn.close()
+                source_conn.close()
+            backed_up.append(str(relative))
 
         (self.db_backup_dir / "manifest.json").write_text(
             json.dumps(
