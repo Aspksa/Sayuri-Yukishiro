@@ -268,6 +268,14 @@ next_action: v0.4.0 — Система модулей и их жизненный
 - CHG-0102 / FIX-0030 -> BUG-0030 — конфликт нумерации нормализован: существующий rollback-guard сохраняет BUG-0024, новые hardening-дефекты перенумерованы без повторного использования ID.
 - CHG-0103 / BUG-0031 — update lifecycle использовал os.kill(pid, 0) как проверку живого процесса; на Windows это недостаточно надёжная основа для ожидания parent/helper.
 - CHG-0104 / FIX-0031 -> BUG-0031 — вводится единая platform-aware проверка process_alive: Windows OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION), POSIX signal 0; её используют helper и UpdateService.
+- CHG-0105 / BUG-0032 — FIX-0031 оказался неполным: UpdateService сохранил собственную проверку PID, а общий Windows process_alive не проверял STILL_ACTIVE через GetExitCodeProcess.
+- CHG-0106 / FIX-0032 -> BUG-0032 — helper и UpdateService используют единый process_alive; Windows-путь проверяет GetExitCodeProcess == STILL_ACTIVE.
+- CHG-0107 / BUG-0033 — Host-защита применялась только к update/control/shutdown endpoints; прочие локальные API и shell оставались доступны при неподходящем Host.
+- CHG-0108 / FIX-0033 -> BUG-0033 — все GET/POST запросы локального HTTP-сервера требуют loopback-клиент и loopback Host до маршрутизации.
+- CHG-0109 / BUG-0034 — SQLite rollback восстанавливал snapshot-файлы, но мог оставить БД, созданные неудачной новой версией, и journal sidecars.
+- CHG-0110 / FIX-0034 -> BUG-0034 — rollback удаляет SQLite БД, отсутствующие в backup manifest, и очищает -wal/-shm/-journal перед восстановлением snapshot.
+- CHG-0111 / BUG-0035 — helper считал restart успешным по project identity без проверки ожидаемой версии и мог принять чужой/старый экземпляр Sayuri.
+- CHG-0112 / FIX-0035 -> BUG-0035 — health-gate restart/rollback требует точного expected version вместе с status=ok и project identity.
 
 Проверки:
 
