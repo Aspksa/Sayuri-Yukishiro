@@ -305,8 +305,12 @@ class UpdateServiceTests(unittest.TestCase):
                 conn.close()
 
             extra_db = runtime_data / "new-version-only.db"
-            with sqlite3.connect(extra_db) as conn:
-                conn.execute("CREATE TABLE extra(value TEXT)")
+            extra_conn = sqlite3.connect(extra_db)
+            try:
+                extra_conn.execute("CREATE TABLE extra(value TEXT)")
+                extra_conn.commit()
+            finally:
+                extra_conn.close()
             Path(str(db_path) + "-journal").write_text(
                 "stale",
                 encoding="utf-8",
@@ -511,13 +515,13 @@ class UpdateServiceTests(unittest.TestCase):
                     helper,
                     "_wait_health",
                     side_effect=TimeoutError("not healthy"),
-                ),
+                ) as wait_health,
                 patch.object(helper, "_terminate_process") as terminate,
             ):
                 with self.assertRaises(TimeoutError):
                     helper.restart()
             terminate.assert_called_once_with(process)
-            helper._wait_health.assert_called_once_with(
+            wait_health.assert_called_once_with(
                 process,
                 expected_version="0.4.0",
             )
