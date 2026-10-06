@@ -300,3 +300,44 @@ e4a45a2fd617005109802b6cc99ebe4f8a6b70c5
 Следующий шаг:
 
 next_action: v0.5.0 — Module Runtime & Lifecycle: manifests, discovery, dependency graph, permissions, migrations, health-check, controlled startup/shutdown и регистрация безопасных способностей модулей в Cognitive CapabilityRegistry.
+
+
+---
+
+## v0.5.0
+
+Дата: 2026-10-07
+
+Статус: in_progress
+
+Изменения:
+
+- CHG-0119 / ARCH-0008 — вводится Module Runtime как управляемая служба системного ядра; функциональные модули остаются расширениями и не получают привилегии UpdateService.
+- CHG-0120 / FEAT-0032 — добавляется строгий module.json manifest с SemVer, API compatibility, entrypoint, dependencies, permissions, migrations и capabilities.
+- CHG-0121 / FEAT-0033 — добавляется безопасное discovery модулей из project-relative modules/ с изоляцией ошибок отдельных manifests.
+- CHG-0122 / FEAT-0034 — добавляется dependency graph: missing dependencies, minimum versions, topological ordering и cycle detection.
+- CHG-0123 / FEAT-0035 — добавляется permission-scoped ModuleContext вместо передачи модулю полного CoreAPI.
+- CHG-0124 / FEAT-0036 — добавляется per-module migration engine с checksum и отдельной SQLite БД каждого модуля.
+- CHG-0125 / FEAT-0037 — добавляется управляемый lifecycle: enabled/disabled, start/stop, health, isolation failures и controlled enable/disable.
+- CHG-0126 / FEAT-0038 — добавляется долговечное состояние Module Runtime и schema migration v4 центральной БД.
+- CHG-0127 / FEAT-0039 — активные module capabilities подключаются к Cognitive CapabilityRegistry; mutation/external остаются заблокированы ExecutionGate.
+- CHG-0128 / FEAT-0040 — локальный API расширяется runtime-статусом модулей и защищённым enable/disable control.
+- CHG-0129 / IMP-0005 — добавляются regression tests, диагностика и архитектурная документация Module Runtime.
+
+Проверки:
+
+- tests: PENDING
+- lint: NOT_CONFIGURED
+- type-check: NOT_CONFIGURED
+- smoke-test: PENDING
+- protocol-validation: PENDING
+- python-compile: PENDING
+- powershell-syntax: PENDING
+
+Commit:
+
+PENDING_AFTER_IMPLEMENTATION_CHECKS
+
+Следующий шаг:
+
+next_action: реализовать Module Runtime v0.5.0 и доказать manifests, dependency graph, permissions, migrations, lifecycle и Cognitive capability bridge regression-тестами.

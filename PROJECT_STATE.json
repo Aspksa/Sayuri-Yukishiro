@@ -5,8 +5,8 @@
   "version": "0.4.0",
   "development_version": "0.5.0",
   "core_version": "0.3.0",
-  "stage": "project-updates",
-  "status": "completed",
+  "stage": "module-runtime",
+  "status": "in_progress",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -48,7 +48,7 @@
     "update_data_verification": "post-update tests use isolated SAYURI_DATA_DIR",
     "update_rollback": "tracked code archive + SQLite snapshots; failed version DBs/sidecars removed on rollback"
   },
-  "next_action": "v0.5.0 Module Runtime & Lifecycle: add manifests, discovery, dependency graph, permissions, migrations, health checks, controlled startup/shutdown, and safe capability registration into the Cognitive Core.",
+  "next_action": "v0.5.0 Module Runtime & Lifecycle: implement manifests, discovery, dependency graph, permissions, migrations, controlled lifecycle, persistent state, protected API, and Cognitive capability bridge.",
   "system_core": {
     "version": "0.3.0",
     "services": [
