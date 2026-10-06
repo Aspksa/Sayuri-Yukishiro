@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "project": "Sayuri Yukishiro",
+  "repository": "Aspksa/Sayuri-Yukishiro",
+  "version": "0.1.0",
+  "core_version": "0.1.0",
+  "stage": "foundation-bootstrap",
+  "status": "implemented",
+  "platform": {
+    "primary": "Windows",
+    "portable_paths": true,
+    "default_host": "127.0.0.1",
+    "default_port": 8765
+  },
+  "foundation": {
+    "launcher": "Sayuri-Yukishiro.bat -> scripts/launcher.ps1",
+    "tray": "Windows Forms NotifyIcon",
+    "web_shell": "Python standard library HTTP server",
+    "core_database": "data/core/sayuri_yukishiro.db",
+    "module_databases": "data/modules/<module_id>.db",
+    "auto_update": "git fetch + fast-forward only when worktree is clean"
+  },
+  "versioning_policy": {
+    "project_version": "SemVer",
+    "rule": "Every released project change increments the project version.",
+    "module_versions": "Each module owns an independent SemVer version."
+  },
+  "safety": {
+    "no_hardcoded_drive_letter": true,
+    "no_forced_git_reset": true,
+    "no_update_over_local_changes": true,
+    "bind_localhost_only": true
+  },
+  "next_action": "v0.1.1 Module Runtime & Lifecycle: add manifests, discovery, permissions, migrations, dependency validation, module health, and controlled startup/shutdown."
+}

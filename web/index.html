@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sayuri Yukishiro</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      background: #111318;
+      color: #eef1f5;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #111318; }
+    main { width: min(1040px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0; }
+    .hero { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+    h1 { margin: 0; font-size: clamp(30px, 5vw, 54px); letter-spacing: -0.04em; }
+    .subtitle { color: #aeb6c2; margin-top: 8px; }
+    .status { display: inline-flex; align-items: center; gap: 8px; color: #b9f5cd; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 16px currentColor; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    .card { background: #181b22; border: 1px solid #292e38; border-radius: 18px; padding: 20px; }
+    .label { color: #8f99a8; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { font-size: 22px; margin-top: 8px; word-break: break-word; }
+    .small { font-size: 14px; color: #bbc2cc; line-height: 1.55; }
+    #modules { margin-top: 14px; }
+    .module { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid #292e38; }
+    .module:first-child { border-top: 0; }
+    .pill { color: #c9d4e3; background: #232832; border-radius: 999px; padding: 3px 9px; font-size: 12px; height: fit-content; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <div>
+      <h1>Sayuri Yukishiro</h1>
+      <div class="subtitle">Модульная персональная AI-платформа</div>
+    </div>
+    <div class="status"><span class="dot"></span><span id="health">Проверка…</span></div>
+  </section>
+
+  <section class="grid">
+    <article class="card">
+      <div class="label">Версия проекта</div>
+      <div class="value" id="version">—</div>
+    </article>
+    <article class="card">
+      <div class="label">База ядра</div>
+      <div class="value" id="dbcheck">—</div>
+      <div class="small" id="dbpath"></div>
+    </article>
+    <article class="card">
+      <div class="label">Модули</div>
+      <div class="value" id="moduleCount">—</div>
+    </article>
+  </section>
+
+  <article class="card" style="margin-top:14px">
+    <div class="label">Реестр модулей</div>
+    <div id="modules" class="small">Загрузка…</div>
+  </article>
+</main>
+
+<script>
+async function load() {
+  try {
+    const [healthRes, systemRes, modulesRes] = await Promise.all([
+      fetch('/api/health'),
+      fetch('/api/system'),
+      fetch('/api/modules')
+    ]);
+    const health = await healthRes.json();
+    const system = await systemRes.json();
+    const modules = await modulesRes.json();
+
+    document.getElementById('health').textContent = health.status === 'ok' ? 'Система активна' : 'Ошибка';
+    document.getElementById('version').textContent = system.version;
+    document.getElementById('dbcheck').textContent = system.database_check;
+    document.getElementById('dbpath').textContent = system.database;
+    document.getElementById('moduleCount').textContent = system.module_count;
+
+    const root = document.getElementById('modules');
+    root.innerHTML = '';
+    for (const module of modules.modules) {
+      const row = document.createElement('div');
+      row.className = 'module';
+      row.innerHTML = '<div><strong>' + module.name + '</strong><div>' + module.id + ' · v' + module.version + '</div></div><span class="pill">' + module.status + '</span>';
+      root.appendChild(row);
+    }
+  } catch (error) {
+    document.getElementById('health').textContent = 'Нет связи с ядром';
+  }
+}
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>
