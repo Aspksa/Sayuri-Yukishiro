@@ -266,6 +266,8 @@ next_action: v0.4.0 — Система модулей и их жизненный
 - CHG-0100 / FIX-0029 -> BUG-0029 — tray повторно захватывает PID только когда /api/health подтверждает project = Sayuri Yukishiro.
 - CHG-0101 / BUG-0030 — параллельные изменения повторно зарезервировали CHG-0089/0090 и BUG-0024/FIX-0024 для разных дефектов.
 - CHG-0102 / FIX-0030 -> BUG-0030 — конфликт нумерации нормализован: существующий rollback-guard сохраняет BUG-0024, новые hardening-дефекты перенумерованы без повторного использования ID.
+- CHG-0103 / BUG-0031 — update lifecycle использовал os.kill(pid, 0) как проверку живого процесса; на Windows это недостаточно надёжная основа для ожидания parent/helper.
+- CHG-0104 / FIX-0031 -> BUG-0031 — вводится единая platform-aware проверка process_alive: Windows OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION), POSIX signal 0; её используют helper и UpdateService.
 
 Проверки:
 
