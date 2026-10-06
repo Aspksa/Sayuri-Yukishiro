@@ -2,11 +2,11 @@
   "schema_version": 2,
   "project": "Sayuri Yukishiro",
   "repository": "Aspksa/Sayuri-Yukishiro",
-  "version": "0.3.1",
-  "development_version": "0.4.0",
-  "core_version": "0.2.1",
+  "version": "0.4.0",
+  "development_version": "0.5.0",
+  "core_version": "0.3.0",
   "stage": "module-runtime",
-  "status": "in_progress",
+  "status": "completed",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -20,7 +20,8 @@
     "core_database": "data/core/sayuri_yukishiro.db",
     "module_databases": "data/modules/<module_id>.db",
     "auto_update": "configured upstream + fast-forward only when worktree is clean",
-    "data_directory": "project data/ by default; SAYURI_DATA_DIR may relocate runtime data"
+    "data_directory": "project data/ by default; SAYURI_DATA_DIR may relocate runtime data",
+    "module_sources": "project modules/ by default; SAYURI_MODULES_DIR may add directories"
   },
   "update_protocol": {
     "required": true,
@@ -44,9 +45,9 @@
     "graceful_shutdown": "localhost tokenized POST /api/shutdown with Kill fallback only after timeout",
     "sqlite_journal_policy": "WAL on safe local storage; DELETE on OneDrive/network/removable storage"
   },
-  "next_action": "v0.4.0 Module Runtime & Lifecycle: implement manifests, discovery, dependency graph, permissions, migrations, health checks, controlled startup/shutdown, and module capability registration into the Cognitive Core.",
+  "next_action": "v0.5.0 Action Broker: implement explicit approval and safe execution of MUTATION and EXTERNAL capabilities, extended module permission grants, and an audit trail of executed actions.",
   "system_core": {
-    "version": "0.2.1",
+    "version": "0.3.0",
     "services": [
       "configuration",
       "logging",
@@ -55,15 +56,15 @@
       "checkpoints",
       "recovery"
     ],
-    "database_schema": 2,
+    "database_schema": 4,
     "api": "CoreAPI",
     "recovery_policy": "restore context and next_action without automatic replay of arbitrary actions",
     "job_history_limit": 500,
     "health_policy": "lightweight polling; SQLite quick_check only on deep diagnostics"
   },
-  "cognitive_core_version": "0.3.0",
+  "cognitive_core_version": "0.3.1",
   "cognitive_core": {
-    "version": "0.3.0",
+    "version": "0.3.1",
     "layers": [
       "context",
       "intent",
@@ -92,7 +93,65 @@
     "api": [
       "/api/cognitive",
       "/api/cognitive/sessions"
+    ],
+    "capability_sources": [
+      "cognitive_builtin",
+      "module_runtime"
     ]
   },
-  "module_runtime_development_version": "0.4.0"
+  "module_runtime_version": "0.4.0",
+  "module_runtime": {
+    "version": "0.4.0",
+    "manifest": "modules/<module_id>/module.json",
+    "manifest_version": 1,
+    "layers": [
+      "discovery",
+      "manifest_validation",
+      "dependency_graph",
+      "permission_broker",
+      "module_migrations",
+      "lifecycle",
+      "health",
+      "capability_registration"
+    ],
+    "module_states": [
+      "discovered",
+      "disabled",
+      "rejected",
+      "blocked",
+      "loaded",
+      "migrated",
+      "running",
+      "stopped",
+      "failed"
+    ],
+    "database_schema": 4,
+    "persistence": [
+      "module_states",
+      "module_migrations"
+    ],
+    "auto_granted_permissions": [
+      "core.config.read",
+      "core.events.publish",
+      "core.jobs.submit",
+      "core.checkpoints.write",
+      "module.database"
+    ],
+    "blocked_permissions": [
+      "system.process",
+      "network.outbound",
+      "filesystem.write"
+    ],
+    "capability_namespace": "module.<module_id>.<name>",
+    "failure_policy": "isolate failed module, block dependents, save checkpoint with next_action; modules.strict_startup rolls back every started module",
+    "bundled_modules": [
+      "system_probe"
+    ],
+    "api": [
+      "/api/modules",
+      "/api/modules/runtime",
+      "/api/modules/health",
+      "/api/modules/states"
+    ]
+  }
 }

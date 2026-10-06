@@ -226,37 +226,39 @@ next_action: v0.4.0 — Система модулей и их жизненный
 
 Дата: 2026-10-07
 
-Статус: in_progress
+Статус: completed
 
 Изменения:
 
-- CHG-0067 / ARCH-0007 — Module Runtime выделяется в отдельный слой между системным и когнитивным ядром; схема SQLite расширяется до v4.
-- CHG-0068 / FEAT-0026 — добавляется формат манифеста модуля module.json со строгой валидацией полей, версий и объявленных способностей.
-- CHG-0069 / FEAT-0027 — добавляется обнаружение модулей в каталоге modules/ с изоляцией ошибок отдельного манифеста.
-- CHG-0070 / FEAT-0028 — добавляется граф зависимостей модулей: топологический порядок запуска, обнаружение циклов, отсутствующих и несовместимых по версии зависимостей.
-- CHG-0071 / FEAT-0029 — добавляется модель разрешений модулей: READ_ONLY выдаются автоматически, MUTATION/EXTERNAL остаются заблокированными до Action Broker.
-- CHG-0072 / FEAT-0030 — добавляются миграции модульных БД с долговечным реестром применённых версий в БД самого модуля.
-- CHG-0073 / FEAT-0031 — добавляется управляемый жизненный цикл модуля load -> migrate -> start -> stop с откатом уже запущенных модулей при ошибке.
-- CHG-0074 / FEAT-0032 — добавляются health-check модулей и агрегированное состояние рантайма модулей.
-- CHG-0075 / FEAT-0033 — способности модулей регистрируются в когнитивном CapabilityRegistry с namespace module.<id>.<name> и снимаются при остановке модуля.
-- CHG-0076 / FEAT-0034 — добавляется эталонный встроенный модуль system_probe как проверяемая реализация контракта модуля.
-- CHG-0077 / IMP-0004 — диагностика и локальный read-only API расширяются /api/modules/runtime и проверкой module_runtime.
-- CHG-0078 / IMP-0005 — добавляется docs/MODULE_RUNTIME.md; ARCHITECTURE.md и README обновляются под слой модулей.
+- CHG-0067 / ARCH-0007 — Module Runtime выделен в отдельный слой между системным и когнитивным ядром; схема SQLite расширена до v4 таблицей module_states.
+- CHG-0068 / FEAT-0026 — добавлен формат манифеста module.json со строгой валидацией полей, SemVer, спецификаторов версий >=, == и ~>, разрешений и объявленных способностей.
+- CHG-0069 / FEAT-0027 — добавлено обнаружение модулей в каталоге modules/ с изоляцией ошибок отдельного манифеста; id обязан совпадать с именем каталога, дубликаты отклоняются.
+- CHG-0070 / FEAT-0028 — добавлен граф зависимостей модулей: детерминированный топологический порядок запуска, обнаружение циклов, отсутствующих, отключённых и несовместимых по версии зависимостей, каскадный отказ dependency_unresolved.
+- CHG-0071 / FEAT-0029 — добавлена модель разрешений модулей: чтение конфигурации, публикация событий, задачи, контрольные точки и собственная БД выдаются автоматически; процессы, сеть и запись в файловую систему остаются заблокированными до Action Broker, и модуль с таким запросом не запускается.
+- CHG-0072 / FEAT-0030 — добавлены миграции модульных БД с долговечным реестром module_migrations в БД самого модуля, идемпотентным применением и отказом, если БД новее кода модуля.
+- CHG-0073 / FEAT-0031 — добавлен управляемый жизненный цикл модуля load -> migrate -> start -> stop: по умолчанию сбой изолируется, зависимые модули блокируются с причиной dependency_failed и создаётся checkpoint с точным next_action; строгий режим modules.strict_startup выполняет полный откат уже запущенных модулей.
+- CHG-0074 / FEAT-0032 — добавлены health-check модулей и агрегированное состояние рантайма healthy/degraded/failed; исключение внутри health() модуля не ломает платформу.
+- CHG-0075 / FEAT-0033 — способности модулей регистрируются в когнитивном CapabilityRegistry под именем module.<id>.<name> и снимаются при остановке модуля; добавлены unregister/unregister_module и отказ ExecutionGate с причиной module_permission_denied.
+- CHG-0076 / FEAT-0034 — добавлен эталонный встроенный модуль modules/system_probe с собственной миграцией, read-only способностью и health-check.
+- CHG-0077 / IMP-0004 — добавлены /api/modules/runtime, /api/modules/health и /api/modules/states; состояние модулей добавлено в /api/health, /api/system и web shell; в диагностику добавлена проверка module_runtime.
+- CHG-0078 / IMP-0005 — добавлен docs/MODULE_RUNTIME.md; docs/ARCHITECTURE.md и README обновлены под слой модулей.
 
 Проверки:
 
-- tests: PENDING
+- tests: PASS (44 теста, из них 23 новых для слоя модулей)
 - lint: NOT_CONFIGURED
 - type-check: NOT_CONFIGURED
-- smoke-test: PENDING
-- protocol-validation: PENDING
-- python-compile: PENDING
-- powershell-syntax: PENDING
+- smoke-test: PASS
+- protocol-validation: PASS
+- python-compile: PASS
+- powershell-syntax: PASS
+- live-http-api: PASS (/api/health, /api/system, /api/modules/runtime, /api/modules/health, /api/modules/states)
 
 Commit:
 
-PENDING_AFTER_IMPLEMENTATION_CHECKS
+c2f89149d3cb39288c2de3df7a822d45b84bc1a6
+87783de39242a94cdae26c9723e66b2cc3bac54b
 
 Следующий шаг:
 
-next_action: реализовать Module Runtime v0.4.0, выполнить полный Foundation Smoke и финализировать релиз.
+next_action: v0.5.0 — Action Broker: подтверждение и безопасное выполнение способностей уровня MUTATION и EXTERNAL, выдача расширенных разрешений модулям и аудит выполненных действий.
