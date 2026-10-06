@@ -11,8 +11,10 @@ LOG_PATH = ROOT / "UPDATE_LOG.md"
 STATE_PATH = ROOT / "PROJECT_STATE.json"
 VERSION_PATH = ROOT / "VERSION"
 
-ID_PATTERN = re.compile(r"\b(CHG|FEAT|BUG|FIX|IMP|ARCH)-(\d{4})\b")
-FIX_PATTERN = re.compile(r"\b(FIX-\d{4})\s*->\s*(BUG-\d{4})\b")
+CHANGE_LINE = re.compile(
+    r"^- (CHG-\d{4}) / (ARCH|FEAT|BUG|FIX|IMP)-(\d{4})(?: -> (BUG-\d{4}))? — ",
+    re.MULTILINE,
+)
 VERSION_HEADING = re.compile(r"^##\s+v(\d+\.\d+\.\d+)\s*$", re.MULTILINE)
 STATUS_PATTERN = re.compile(r"^Статус:\s*(\S+)\s*$", re.MULTILINE)
 
@@ -27,34 +29,59 @@ def main() -> int:
     log = LOG_PATH.read_text(encoding="utf-8")
     release_version = VERSION_PATH.read_text(encoding="utf-8").strip()
 
-    seen: dict[str, int] = {}
-    for prefix, number_text in ID_PATTERN.findall(log):
-        identifier = f"{prefix}-{number_text}"
-        seen[identifier] = seen.get(identifier, 0) + 1
+    changes = CHANGE_LINE.findall(log)
+    if not changes:
+        fail("UPDATE_LOG.md contains no registered changes")
 
-    duplicates = sorted(identifier for identifier, count in seen.items() if count > 1)
+    primary_ids: list[str] = []
+    declared_by_prefix: dict[str, list[int]] = {
+        "CHG": [],
+        "FEAT": [],
+        "BUG": [],
+        "FIX": [],
+        "IMP": [],
+        "ARCH": [],
+    }
+    bug_ids: set[str] = set()
+    fix_refs: list[tuple[str, str]] = []
+
+    for chg_id, kind, number_text, bug_ref in changes:
+        typed_id = f"{kind}-{number_text}"
+        primary_ids.extend([chg_id, typed_id])
+        declared_by_prefix["CHG"].append(int(chg_id.split("-")[1]))
+        declared_by_prefix[kind].append(int(number_text))
+        if kind == "BUG":
+            bug_ids.add(typed_id)
+        if kind == "FIX":
+            if not bug_ref:
+                fail(f"{typed_id} has no BUG reference")
+            fix_refs.append((typed_id, bug_ref))
+
+    duplicates = sorted(
+        identifier
+        for identifier in set(primary_ids)
+        if primary_ids.count(identifier) > 1
+    )
     if duplicates:
-        fail(f"Duplicate IDs in UPDATE_LOG.md: {duplicates}")
+        fail(f"Duplicate primary IDs in UPDATE_LOG.md: {duplicates}")
 
-    for fix_id, bug_id in FIX_PATTERN.findall(log):
-        if bug_id not in seen:
+    for fix_id, bug_id in fix_refs:
+        if bug_id not in bug_ids:
             fail(f"{fix_id} references missing {bug_id}")
 
     for prefix, last in ids["last_assigned"].items():
-        allocated = [
-            int(number)
-            for found_prefix, number in ID_PATTERN.findall(log)
-            if found_prefix == prefix
-        ]
-        actual_max = max(allocated, default=0)
+        actual_max = max(declared_by_prefix[prefix], default=0)
         if actual_max != int(last):
             fail(f"Counter mismatch for {prefix}: registry={last}, journal={actual_max}")
-
         expected_next = f"{prefix}-{int(last) + 1:04d}"
         if ids["next"].get(prefix) != expected_next:
             fail(f"Next ID mismatch for {prefix}: expected {expected_next}")
 
-    sections = re.split(r"(?=^##\s+v\d+\.\d+\.\d+\s*$)", log, flags=re.MULTILINE)
+    sections = re.split(
+        r"(?=^##\s+v\d+\.\d+\.\d+\s*$)",
+        log,
+        flags=re.MULTILINE,
+    )
     completed_versions: list[str] = []
     in_progress_versions: list[str] = []
 
@@ -79,7 +106,9 @@ def main() -> int:
 
     latest_completed = completed_versions[-1]
     if release_version != latest_completed:
-        fail(f"VERSION={release_version}; latest completed journal version={latest_completed}")
+        fail(
+            f"VERSION={release_version}; latest completed journal version={latest_completed}"
+        )
 
     if state.get("version") != release_version:
         fail("PROJECT_STATE version does not match VERSION")
