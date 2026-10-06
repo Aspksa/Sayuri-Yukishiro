@@ -218,3 +218,45 @@ Commit:
 Следующий шаг:
 
 next_action: v0.4.0 — Система модулей и их жизненный цикл: manifests, discovery, dependency graph, permissions, migrations, health-check, controlled startup/shutdown и регистрация способностей модулей в когнитивном ядре.
+
+
+---
+
+## v0.4.0
+
+Дата: 2026-10-07
+
+Статус: in_progress
+
+Изменения:
+
+- CHG-0067 / ARCH-0007 — Module Runtime выделяется в отдельный слой между системным и когнитивным ядром; схема SQLite расширяется до v4.
+- CHG-0068 / FEAT-0026 — добавляется формат манифеста модуля module.json со строгой валидацией полей, версий и объявленных способностей.
+- CHG-0069 / FEAT-0027 — добавляется обнаружение модулей в каталоге modules/ с изоляцией ошибок отдельного манифеста.
+- CHG-0070 / FEAT-0028 — добавляется граф зависимостей модулей: топологический порядок запуска, обнаружение циклов, отсутствующих и несовместимых по версии зависимостей.
+- CHG-0071 / FEAT-0029 — добавляется модель разрешений модулей: READ_ONLY выдаются автоматически, MUTATION/EXTERNAL остаются заблокированными до Action Broker.
+- CHG-0072 / FEAT-0030 — добавляются миграции модульных БД с долговечным реестром применённых версий в БД самого модуля.
+- CHG-0073 / FEAT-0031 — добавляется управляемый жизненный цикл модуля load -> migrate -> start -> stop с откатом уже запущенных модулей при ошибке.
+- CHG-0074 / FEAT-0032 — добавляются health-check модулей и агрегированное состояние рантайма модулей.
+- CHG-0075 / FEAT-0033 — способности модулей регистрируются в когнитивном CapabilityRegistry с namespace module.<id>.<name> и снимаются при остановке модуля.
+- CHG-0076 / FEAT-0034 — добавляется эталонный встроенный модуль system_probe как проверяемая реализация контракта модуля.
+- CHG-0077 / IMP-0004 — диагностика и локальный read-only API расширяются /api/modules/runtime и проверкой module_runtime.
+- CHG-0078 / IMP-0005 — добавляется docs/MODULE_RUNTIME.md; ARCHITECTURE.md и README обновляются под слой модулей.
+
+Проверки:
+
+- tests: PENDING
+- lint: NOT_CONFIGURED
+- type-check: NOT_CONFIGURED
+- smoke-test: PENDING
+- protocol-validation: PENDING
+- python-compile: PENDING
+- powershell-syntax: PENDING
+
+Commit:
+
+PENDING_AFTER_IMPLEMENTATION_CHECKS
+
+Следующий шаг:
+
+next_action: реализовать Module Runtime v0.4.0, выполнить полный Foundation Smoke и финализировать релиз.

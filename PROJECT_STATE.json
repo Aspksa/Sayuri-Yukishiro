@@ -5,8 +5,8 @@
   "version": "0.3.1",
   "development_version": "0.4.0",
   "core_version": "0.2.1",
-  "stage": "core-stability",
-  "status": "completed",
+  "stage": "module-runtime",
+  "status": "in_progress",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -44,7 +44,7 @@
     "graceful_shutdown": "localhost tokenized POST /api/shutdown with Kill fallback only after timeout",
     "sqlite_journal_policy": "WAL on safe local storage; DELETE on OneDrive/network/removable storage"
   },
-  "next_action": "v0.4.0 Module Runtime & Lifecycle: add manifests, discovery, dependency graph, permissions, migrations, health checks, controlled startup/shutdown, and capability registration into the Cognitive Core.",
+  "next_action": "v0.4.0 Module Runtime & Lifecycle: implement manifests, discovery, dependency graph, permissions, migrations, health checks, controlled startup/shutdown, and module capability registration into the Cognitive Core.",
   "system_core": {
     "version": "0.2.1",
     "services": [
@@ -93,5 +93,6 @@
       "/api/cognitive",
       "/api/cognitive/sessions"
     ]
-  }
+  },
+  "module_runtime_development_version": "0.4.0"
 }
