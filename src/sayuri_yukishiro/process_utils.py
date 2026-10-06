@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import ctypes
-import errno
 import os
+
+
+_STILL_ACTIVE = 259
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 
 def process_alive(pid: int) -> bool:
@@ -10,12 +13,10 @@ def process_alive(pid: int) -> bool:
         return False
 
     if os.name == "nt":
-        process_query_limited_information = 0x1000
-        still_active = 259
         try:
             kernel32 = ctypes.windll.kernel32
             handle = kernel32.OpenProcess(
-                process_query_limited_information,
+                _PROCESS_QUERY_LIMITED_INFORMATION,
                 False,
                 int(pid),
             )
@@ -23,25 +24,19 @@ def process_alive(pid: int) -> bool:
             return False
         if not handle:
             return False
-
-        exit_code = ctypes.c_ulong()
         try:
-            ok = bool(
-                kernel32.GetExitCodeProcess(
-                    handle,
-                    ctypes.byref(exit_code),
-                )
-            )
-            return ok and exit_code.value == still_active
+            exit_code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(
+                handle,
+                ctypes.byref(exit_code),
+            ):
+                return False
+            return int(exit_code.value) == _STILL_ACTIVE
         finally:
             kernel32.CloseHandle(handle)
 
     try:
         os.kill(int(pid), 0)
-    except ProcessLookupError:
+    except OSError:
         return False
-    except PermissionError:
-        return True
-    except OSError as exc:
-        return exc.errno == errno.EPERM
     return True

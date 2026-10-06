@@ -101,45 +101,28 @@ class UpdateHelper:
                 )
             time.sleep(0.25)
 
-    def _production_database_files(self) -> list[Path]:
-        if not self.data_dir.is_dir():
-            return []
-        update_dir = self.state_path.parent.resolve(strict=False)
-        databases: list[Path] = []
-        for source in self.data_dir.rglob("*.db"):
-            resolved = source.resolve(strict=False)
-            if update_dir == resolved or update_dir in resolved.parents:
-                continue
-            if source.is_file():
-                databases.append(source)
-        return sorted(databases)
-
-    @staticmethod
-    def _remove_sqlite_sidecars(database: Path) -> None:
-        for suffix in ("-wal", "-shm", "-journal"):
-            Path(str(database) + suffix).unlink(missing_ok=True)
-
     def _backup_databases(self) -> list[str]:
         if self.db_backup_dir.exists():
             shutil.rmtree(self.db_backup_dir)
         self.db_backup_dir.mkdir(parents=True, exist_ok=True)
 
         backed_up: list[str] = []
-        for source in self._production_database_files():
-            try:
-                relative = source.relative_to(self.data_dir)
-            except ValueError:
-                continue
-            destination = self.db_backup_dir / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            source_conn = sqlite3.connect(source, timeout=10)
-            target_conn = sqlite3.connect(destination, timeout=10)
-            try:
-                source_conn.backup(target_conn)
-            finally:
-                target_conn.close()
-                source_conn.close()
-            backed_up.append(str(relative))
+        if self.data_dir.exists():
+            for source in sorted(self.data_dir.rglob("*.db")):
+                try:
+                    relative = source.relative_to(self.data_dir)
+                except ValueError:
+                    continue
+                destination = self.db_backup_dir / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source_conn = sqlite3.connect(source, timeout=10)
+                target_conn = sqlite3.connect(destination, timeout=10)
+                try:
+                    source_conn.backup(target_conn)
+                finally:
+                    target_conn.close()
+                    source_conn.close()
+                backed_up.append(str(relative))
 
         (self.db_backup_dir / "manifest.json").write_text(
             json.dumps(
@@ -349,9 +332,9 @@ class UpdateHelper:
     def _wait_health(
         self,
         process: subprocess.Popen[Any],
+        timeout: float = 25.0,
         *,
         expected_version: str | None = None,
-        timeout: float = 25.0,
     ) -> dict[str, Any]:
         url = f"http://127.0.0.1:{self.port}/api/health"
         deadline = time.monotonic() + timeout
@@ -366,14 +349,13 @@ class UpdateHelper:
                     payload = json.loads(
                         response.read().decode("utf-8")
                     )
-                version_ok = (
-                    not expected_version
-                    or payload.get("version") == expected_version
-                )
                 if (
                     payload.get("status") == "ok"
                     and payload.get("project") == "Sayuri Yukishiro"
-                    and version_ok
+                    and (
+                        expected_version is None
+                        or payload.get("version") == expected_version
+                    )
                 ):
                     return payload
                 last_error = str(payload)
@@ -441,33 +423,53 @@ class UpdateHelper:
         return process
 
     def _restore_database_backups(self) -> int:
+        if not self.db_backup_dir.is_dir():
+            return 0
+
         manifest_path = self.db_backup_dir / "manifest.json"
-        if not manifest_path.is_file():
-            raise RuntimeError("SQLite backup manifest is missing.")
+        backed_up: set[Path] = set()
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+                backed_up = {
+                    Path(item)
+                    for item in manifest.get("databases", [])
+                    if isinstance(item, str)
+                }
+            except (OSError, json.JSONDecodeError):
+                backed_up = set()
 
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        expected = {
-            Path(item)
-            for item in manifest.get("databases", [])
-            if isinstance(item, str) and item
-        }
+        control_dir = self.state_path.parent.resolve()
+        if self.data_dir.exists():
+            for current in sorted(self.data_dir.rglob("*.db")):
+                resolved = current.resolve()
+                try:
+                    resolved.relative_to(control_dir)
+                    continue
+                except ValueError:
+                    pass
 
-        for current in self._production_database_files():
-            relative = current.relative_to(self.data_dir)
-            if relative not in expected:
-                self._remove_sqlite_sidecars(current)
-                current.unlink(missing_ok=True)
+                relative = current.relative_to(self.data_dir)
+                if relative in backed_up:
+                    continue
+
+                for suffix in ("", "-wal", "-shm", "-journal"):
+                    Path(str(current) + suffix).unlink(missing_ok=True)
 
         restored = 0
-        for relative in sorted(expected, key=lambda item: item.as_posix()):
-            snapshot = self.db_backup_dir / relative
-            if not snapshot.is_file():
-                raise RuntimeError(
-                    f"SQLite backup file is missing: {relative.as_posix()}"
-                )
+        for snapshot in sorted(self.db_backup_dir.rglob("*.db")):
+            relative = snapshot.relative_to(self.db_backup_dir)
             destination = self.data_dir / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
-            self._remove_sqlite_sidecars(destination)
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                target = (
+                    destination
+                    if suffix == ""
+                    else Path(str(destination) + suffix)
+                )
+                target.unlink(missing_ok=True)
             shutil.copy2(snapshot, destination)
             restored += 1
         return restored

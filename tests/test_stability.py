@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -13,6 +14,7 @@ from sayuri_yukishiro.core.jobs import JobManager
 from sayuri_yukishiro.core.runtime import SystemCore
 from sayuri_yukishiro.database import CoreDatabase
 from sayuri_yukishiro.paths import PROJECT_ROOT
+from sayuri_yukishiro.process_utils import process_alive
 from sayuri_yukishiro.server import SayuriHandler, serve
 from sayuri_yukishiro.storage_policy import sqlite_journal_mode
 from sayuri_yukishiro.updater import inspect_update
@@ -24,6 +26,17 @@ from sayuri_yukishiro.version import (
 
 
 class StabilityRegressionTests(unittest.TestCase):
+    def test_process_alive_is_read_only_and_detects_exit(self) -> None:
+        self.assertTrue(process_alive(os.getpid()))
+        child = subprocess.Popen(
+            [sys.executable, "-c", "pass"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        pid = child.pid
+        child.wait(timeout=5)
+        self.assertFalse(process_alive(pid))
+
     def test_bind_failure_stops_both_cores(self) -> None:
         system = MagicMock()
         system.api = object()

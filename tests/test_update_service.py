@@ -522,6 +522,69 @@ class UpdateServiceTests(unittest.TestCase):
                 expected_version="0.4.0",
             )
 
+    def test_health_gate_rejects_wrong_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "repo"
+            root.mkdir()
+            state_file = base / "update" / "status.json"
+            state_file.parent.mkdir()
+            save_update_state(default_update_state(), state_file)
+            plan_file = state_file.parent / "plan.json"
+            plan_file.write_text(
+                json.dumps(
+                    {
+                        "root": str(root),
+                        "data_dir": str(base / "runtime-data"),
+                        "state_path": str(state_file),
+                        "backup_path": str(base / "backup.zip"),
+                        "db_backup_dir": str(base / "db-backup"),
+                        "parent_pid": 0,
+                        "python_executable": sys.executable,
+                        "port": 8765,
+                        "shutdown_token": "shutdown-secret",
+                        "before_sha": "a" * 40,
+                        "target_sha": "b" * 40,
+                        "current_version": "0.3.1",
+                        "available_version": "0.4.0",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            helper = UpdateHelper(plan_file)
+            process = MagicMock()
+            process.poll.return_value = None
+            response = MagicMock()
+            response.__enter__.return_value = response
+            response.read.return_value = json.dumps(
+                {
+                    "status": "ok",
+                    "project": "Sayuri Yukishiro",
+                    "version": "0.3.1",
+                }
+            ).encode("utf-8")
+
+            with (
+                patch(
+                    "sayuri_yukishiro.update_helper.urllib.request.urlopen",
+                    return_value=response,
+                ),
+                patch(
+                    "sayuri_yukishiro.update_helper.time.monotonic",
+                    side_effect=[0.0, 0.0, 1.0],
+                ),
+                patch(
+                    "sayuri_yukishiro.update_helper.time.sleep",
+                    return_value=None,
+                ),
+            ):
+                with self.assertRaises(TimeoutError):
+                    helper._wait_health(
+                        process,
+                        timeout=0.5,
+                        expected_version="0.4.0",
+                    )
+
     def test_verification_uses_isolated_runtime_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
