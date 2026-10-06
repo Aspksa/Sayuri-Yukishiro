@@ -4,6 +4,7 @@ import json
 import mimetypes
 import os
 import secrets
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
@@ -29,6 +30,7 @@ class SayuriHTTPServer(ThreadingHTTPServer):
         self.core = core
         self.cognitive = cognitive
         self.shutdown_token = shutdown_token
+        self.control_token = shutdown_token or secrets.token_urlsafe(32)
         super().__init__(server_address, SayuriHandler)
 
 
@@ -47,6 +49,20 @@ class SayuriHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def _is_loopback(self) -> bool:
+        return self.client_address[0] in {"127.0.0.1", "::1"}
+
+    def _control_allowed(self) -> bool:
+        if not self._is_loopback():
+            return False
+        supplied = self.headers.get("X-Sayuri-Control-Token", "")
+        expected = self.app_server.control_token
+        return bool(
+            supplied
+            and expected
+            and secrets.compare_digest(supplied, expected)
+        )
 
     def _serve_file(self, relative: str) -> None:
         root = WEB_DIR.resolve()
@@ -91,6 +107,20 @@ class SayuriHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path == "/api/session/control-token":
+            if not self._is_loopback():
+                self._json(
+                    {"status": "forbidden"},
+                    HTTPStatus.FORBIDDEN,
+                )
+                return
+            self._json({"token": self.app_server.control_token})
+            return
+
+        if path == "/api/update/status":
+            self._json(core.update.status())
+            return
+
         if path == "/api/core":
             self._json(core.status())
             return
@@ -131,6 +161,7 @@ class SayuriHandler(BaseHTTPRequestHandler):
                     "database_check": core_status["database_check"],
                     "module_count": len(core.db.list_modules()),
                     "recoverable_tasks": core_status["recoverable_tasks"],
+                    "update": core_status["update"],
                 }
             )
             return
@@ -140,36 +171,111 @@ class SayuriHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path != "/api/shutdown":
-            self.send_error(HTTPStatus.NOT_FOUND)
+        core = self.app_server.core
+
+        if path == "/api/update/check":
+            if not self._control_allowed():
+                self._json(
+                    {"status": "forbidden"},
+                    HTTPStatus.FORBIDDEN,
+                )
+                return
+            try:
+                job_id = core.update.request_check()
+            except RuntimeError as exc:
+                self._json(
+                    {"status": "busy", "message": str(exc)},
+                    HTTPStatus.CONFLICT,
+                )
+                return
+            self._json(
+                {
+                    "status": "accepted",
+                    "job_id": job_id,
+                    "update": core.update.status(),
+                },
+                HTTPStatus.ACCEPTED,
+            )
             return
 
-        if self.client_address[0] not in {"127.0.0.1", "::1"}:
-            self._json({"status": "forbidden"}, HTTPStatus.FORBIDDEN)
+        if path == "/api/update/apply":
+            if not self._control_allowed():
+                self._json(
+                    {"status": "forbidden"},
+                    HTTPStatus.FORBIDDEN,
+                )
+                return
+            try:
+                update_status = core.update.prepare_apply()
+            except RuntimeError as exc:
+                self._json(
+                    {"status": "blocked", "message": str(exc)},
+                    HTTPStatus.CONFLICT,
+                )
+                return
+
+            self._json(
+                {
+                    "status": "accepted",
+                    "update": update_status,
+                    "message": (
+                        "Sayuri will stop gracefully; the update helper "
+                        "will apply and verify the update."
+                    ),
+                },
+                HTTPStatus.ACCEPTED,
+            )
+
+            def shutdown_after_response() -> None:
+                time.sleep(0.25)
+                self.app_server.shutdown()
+
+            Thread(
+                target=shutdown_after_response,
+                name="sayuri-update-shutdown",
+                daemon=True,
+            ).start()
             return
 
-        expected = self.app_server.shutdown_token
-        supplied = self.headers.get("X-Sayuri-Shutdown-Token", "")
-        if not expected:
-            self._json({"status": "disabled"}, HTTPStatus.SERVICE_UNAVAILABLE)
-            return
-        if not supplied or not secrets.compare_digest(supplied, expected):
-            self._json({"status": "forbidden"}, HTTPStatus.FORBIDDEN)
+        if path == "/api/shutdown":
+            if not self._is_loopback():
+                self._json(
+                    {"status": "forbidden"},
+                    HTTPStatus.FORBIDDEN,
+                )
+                return
+
+            expected = self.app_server.shutdown_token
+            supplied = self.headers.get("X-Sayuri-Shutdown-Token", "")
+            if not expected:
+                self._json(
+                    {"status": "disabled"},
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+            if not supplied or not secrets.compare_digest(supplied, expected):
+                self._json(
+                    {"status": "forbidden"},
+                    HTTPStatus.FORBIDDEN,
+                )
+                return
+
+            self._json({"status": "shutting_down"}, HTTPStatus.OK)
+            Thread(
+                target=self.app_server.shutdown,
+                name="sayuri-shutdown",
+                daemon=True,
+            ).start()
             return
 
-        self._json({"status": "shutting_down"}, HTTPStatus.OK)
-        Thread(
-            target=self.app_server.shutdown,
-            name="sayuri-shutdown",
-            daemon=True,
-        ).start()
+        self.send_error(HTTPStatus.NOT_FOUND)
 
     def log_message(self, format: str, *args) -> None:
         return
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
-    core = SystemCore()
+    core = SystemCore(port=port)
     cognitive: CognitiveCore | None = None
     server: SayuriHTTPServer | None = None
     try:
@@ -183,8 +289,9 @@ def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
             shutdown_token=os.environ.get("SAYURI_SHUTDOWN_TOKEN", ""),
         )
         print(
-            f"Sayuri Yukishiro {project_version()} / system core {core.CORE_VERSION} / "
-            f"cognitive core {cognitive.VERSION} listening on http://{host}:{port}"
+            f"Sayuri Yukishiro {project_version()} / system core "
+            f"{core.CORE_VERSION} / cognitive core {cognitive.VERSION} "
+            f"listening on http://{host}:{port}"
         )
         server.serve_forever(poll_interval=0.5)
     finally:

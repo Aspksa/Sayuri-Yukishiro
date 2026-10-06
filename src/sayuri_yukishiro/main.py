@@ -7,7 +7,6 @@ import sys
 from .diagnostics import has_fatal_failures, print_report, run_diagnostics
 from .paths import project_version
 from .server import serve
-from .updater import safe_update
 
 
 def _port() -> int:
@@ -24,16 +23,12 @@ def _port() -> int:
 def preflight(no_update: bool = False) -> int:
     print(f"Sayuri Yukishiro v{project_version()}")
     print()
-
+    print(
+        "[UPDATE] managed by System Core -> «Обновления проекта»; "
+        "preflight never changes project files."
+    )
     if no_update:
-        print("[UPDATE] skipped by request")
-    else:
-        result = safe_update()
-        print(f"[UPDATE] {result.status}: {result.message}")
-        if result.remote:
-            print(f"         remote: {result.remote}")
-        if result.before and result.after and result.before != result.after:
-            print(f"         {result.before[:12]} -> {result.after[:12]}")
+        print("         legacy --no-update accepted; no mutation is performed.")
     print()
 
     checks = run_diagnostics(_port())
@@ -44,9 +39,21 @@ def preflight(no_update: bool = False) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="sayuri-yukishiro")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--preflight", action="store_true", help="update + diagnostics, then exit")
-    mode.add_argument("--serve", action="store_true", help="start the local Sayuri core")
-    parser.add_argument("--no-update", action="store_true", help="disable Git update check")
+    mode.add_argument(
+        "--preflight",
+        action="store_true",
+        help="run diagnostics, then exit",
+    )
+    mode.add_argument(
+        "--serve",
+        action="store_true",
+        help="start the local Sayuri core",
+    )
+    parser.add_argument(
+        "--no-update",
+        action="store_true",
+        help="legacy compatibility flag; preflight never applies updates",
+    )
     return parser
 
 

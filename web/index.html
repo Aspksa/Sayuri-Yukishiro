@@ -8,92 +8,351 @@
     :root {
       color-scheme: dark;
       font-family: Inter, "Segoe UI", system-ui, sans-serif;
-      background: #111318;
+      background: #101217;
       color: #eef1f5;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #111318; }
-    main { width: min(1040px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0; }
-    .hero { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
-    h1 { margin: 0; font-size: clamp(30px, 5vw, 54px); letter-spacing: -0.04em; }
-    .subtitle { color: #aeb6c2; margin-top: 8px; }
+    body { margin: 0; min-height: 100vh; background: #101217; }
+    button { font: inherit; }
+    .shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    aside { border-right: 1px solid #292e38; padding: 24px 16px; background: #14171d; }
+    .brand { font-weight: 700; font-size: 20px; padding: 8px 10px 24px; }
+    .nav { display: grid; gap: 6px; }
+    .nav button {
+      border: 0; border-radius: 12px; background: transparent; color: #b8c0cc;
+      text-align: left; padding: 11px 12px; cursor: pointer;
+    }
+    .nav button.active, .nav button:hover { background: #20252d; color: #fff; }
+    main { width: min(1080px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .hero { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 48px); letter-spacing: -0.035em; }
+    h2 { margin: 0 0 8px; font-size: 24px; }
+    .subtitle, .muted { color: #9da7b5; }
     .status { display: inline-flex; align-items: center; gap: 8px; color: #b9f5cd; }
-    .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 16px currentColor; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
     .card { background: #181b22; border: 1px solid #292e38; border-radius: 18px; padding: 20px; }
-    .label { color: #8f99a8; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+    .label { color: #8f99a8; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
     .value { font-size: 22px; margin-top: 8px; word-break: break-word; }
     .small { font-size: 14px; color: #bbc2cc; line-height: 1.55; }
-    #modules { margin-top: 14px; }
-    .module { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid #292e38; }
-    .module:first-child { border-top: 0; }
+    .module, .log-row, .change-row {
+      display: flex; justify-content: space-between; gap: 16px; padding: 11px 0;
+      border-top: 1px solid #292e38;
+    }
+    .module:first-child, .log-row:first-child, .change-row:first-child { border-top: 0; }
     .pill { color: #c9d4e3; background: #232832; border-radius: 999px; padding: 3px 9px; font-size: 12px; height: fit-content; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .primary, .secondary {
+      border: 1px solid #394150; border-radius: 12px; padding: 10px 16px; cursor: pointer;
+    }
+    .primary { background: #e7ebf2; color: #15181d; border-color: #e7ebf2; }
+    .secondary { background: #20252d; color: #eef1f5; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .progress { height: 10px; border-radius: 999px; background: #272c35; overflow: hidden; margin-top: 14px; }
+    .progress > div { height: 100%; width: 0; background: #c8d3e3; transition: width .25s ease; }
+    .update-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, .8fr); gap: 14px; }
+    .stack { display: grid; gap: 14px; }
+    .message { margin-top: 12px; line-height: 1.5; }
+    .danger { color: #ffb6b6; }
+    .warning { color: #ffd99a; }
+    @media (max-width: 760px) {
+      .shell { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid #292e38; padding: 12px; }
+      .brand { padding-bottom: 10px; }
+      .nav { grid-template-columns: 1fr 1fr; }
+      main { width: min(100% - 24px, 1080px); padding: 26px 0; }
+      .update-layout { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-<main>
-  <section class="hero">
-    <div>
-      <h1>Sayuri Yukishiro</h1>
-      <div class="subtitle">Модульная персональная AI-платформа</div>
-    </div>
-    <div class="status"><span class="dot"></span><span id="health">Проверка…</span></div>
-  </section>
+<div class="shell">
+  <aside>
+    <div class="brand">Sayuri Yukishiro</div>
+    <nav class="nav">
+      <button id="nav-overview" data-view="overview">Обзор</button>
+      <button id="nav-updates" data-view="updates">Обновления проекта</button>
+    </nav>
+  </aside>
 
-  <section class="grid">
-    <article class="card">
-      <div class="label">Версия проекта</div>
-      <div class="value" id="version">—</div>
-    </article>
-    <article class="card">
-      <div class="label">База ядра</div>
-      <div class="value" id="dbcheck">—</div>
-      <div class="small" id="dbpath"></div>
-    </article>
-    <article class="card">
-      <div class="label">Модули</div>
-      <div class="value" id="moduleCount">—</div>
-    </article>
-  </section>
+  <main>
+    <section id="view-overview" class="view">
+      <div class="hero">
+        <div>
+          <h1>Sayuri Yukishiro</h1>
+          <div class="subtitle">Системное и когнитивное ядро</div>
+        </div>
+        <div class="status"><span class="dot"></span><span id="health">Проверка…</span></div>
+      </div>
 
-  <article class="card" style="margin-top:14px">
-    <div class="label">Реестр модулей</div>
-    <div id="modules" class="small">Загрузка…</div>
-  </article>
-</main>
+      <section class="grid">
+        <article class="card">
+          <div class="label">Версия проекта</div>
+          <div class="value" id="version">—</div>
+        </article>
+        <article class="card">
+          <div class="label">Системное ядро</div>
+          <div class="value" id="coreVersion">—</div>
+        </article>
+        <article class="card">
+          <div class="label">Когнитивное ядро</div>
+          <div class="value" id="cognitiveVersion">—</div>
+        </article>
+      </section>
+
+      <article class="card" style="margin-top:14px">
+        <div class="label">Реестр модулей</div>
+        <div id="modules" class="small">Загрузка…</div>
+      </article>
+    </section>
+
+    <section id="view-updates" class="view">
+      <div class="hero">
+        <div>
+          <h1>Обновления проекта</h1>
+          <div class="subtitle">Обновление системного ядра, оболочки и модулей через единый безопасный контур.</div>
+        </div>
+        <div class="status"><span class="dot"></span><span id="updateConnection">Ядро доступно</span></div>
+      </div>
+
+      <div class="update-layout">
+        <div class="stack">
+          <article class="card">
+            <div class="grid">
+              <div>
+                <div class="label">Текущая версия</div>
+                <div class="value" id="updateCurrent">—</div>
+              </div>
+              <div>
+                <div class="label">Доступная версия</div>
+                <div class="value" id="updateAvailable">—</div>
+              </div>
+              <div>
+                <div class="label">Состояние</div>
+                <div class="value" id="updatePhase">—</div>
+              </div>
+            </div>
+            <div class="progress"><div id="updateProgress"></div></div>
+            <div id="updateMessage" class="message muted">Загрузка состояния…</div>
+            <div class="actions">
+              <button id="checkUpdate" class="secondary">Проверить</button>
+              <button id="applyUpdate" class="primary" disabled>Обновить</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>Что изменится</h2>
+            <div id="updateChanges" class="small">После проверки здесь появится список изменений.</div>
+          </article>
+        </div>
+
+        <article class="card">
+          <h2>Журнал</h2>
+          <div id="updateLog" class="small">Журнал обновления пуст.</div>
+        </article>
+      </div>
+    </section>
+  </main>
+</div>
 
 <script>
-async function load() {
+let controlToken = '';
+let updateState = null;
+let connectionLostDuringApply = false;
+
+function setView(name) {
+  for (const el of document.querySelectorAll('.view')) el.classList.remove('active');
+  for (const el of document.querySelectorAll('.nav button')) el.classList.remove('active');
+  document.getElementById('view-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  location.hash = name === 'updates' ? 'updates' : '';
+}
+
+async function ensureControlToken() {
+  if (controlToken) return controlToken;
+  const response = await fetch('/api/session/control-token', {cache: 'no-store'});
+  if (!response.ok) throw new Error('Не удалось получить локальный управляющий токен.');
+  const payload = await response.json();
+  controlToken = payload.token || '';
+  return controlToken;
+}
+
+async function postControl(path) {
+  const token = await ensureControlToken();
+  return fetch(path, {
+    method: 'POST',
+    headers: {'X-Sayuri-Control-Token': token}
+  });
+}
+
+function phaseText(phase) {
+  const labels = {
+    idle: 'Не проверено',
+    checking: 'Проверка',
+    available: 'Доступно',
+    up_to_date: 'Актуально',
+    blocked: 'Заблокировано',
+    unavailable: 'Недоступно',
+    error: 'Ошибка',
+    prepared: 'Подготовка',
+    waiting_for_shutdown: 'Остановка Sayuri',
+    backing_up: 'Резервная копия',
+    applying: 'Установка',
+    verifying: 'Проверка',
+    rolling_back: 'Откат',
+    restarting: 'Перезапуск',
+    completed: 'Установлено',
+    rolled_back: 'Откат выполнен',
+    failed: 'Ошибка обновления'
+  };
+  return labels[phase] || phase || '—';
+}
+
+function renderList(rootId, items, className, emptyText) {
+  const root = document.getElementById(rootId);
+  root.innerHTML = '';
+  if (!items || items.length === 0) {
+    root.textContent = emptyText;
+    return;
+  }
+  for (const text of items) {
+    const row = document.createElement('div');
+    row.className = className;
+    const span = document.createElement('span');
+    span.textContent = text;
+    row.appendChild(span);
+    root.appendChild(row);
+  }
+}
+
+function renderUpdate(state) {
+  updateState = state;
+  document.getElementById('updateCurrent').textContent = state.current_version || '—';
+  document.getElementById('updateAvailable').textContent = state.available_version || '—';
+  document.getElementById('updatePhase').textContent = phaseText(state.phase);
+  document.getElementById('updateProgress').style.width = Math.max(0, Math.min(100, Number(state.progress || 0))) + '%';
+
+  const message = document.getElementById('updateMessage');
+  message.textContent = state.message || '';
+  message.className = 'message muted';
+  if (state.phase === 'failed' || state.phase === 'error') message.className = 'message danger';
+  if (state.phase === 'blocked' || state.phase === 'rolled_back') message.className = 'message warning';
+
+  const busy = ['checking','prepared','waiting_for_shutdown','backing_up','applying','verifying','rolling_back','restarting'].includes(state.phase);
+  document.getElementById('checkUpdate').disabled = busy;
+  document.getElementById('applyUpdate').disabled = !(state.phase === 'available' && state.can_apply);
+
+  renderList('updateChanges', state.changes || [], 'change-row', 'Нет новых изменений.');
+  const logs = (state.log || []).slice().reverse().map(entry => {
+    const stamp = entry.time ? entry.time.replace('T', ' ').replace('Z', '') : '';
+    return stamp + ' · ' + (entry.message || '');
+  });
+  renderList('updateLog', logs, 'log-row', 'Журнал обновления пуст.');
+}
+
+async function refreshUpdate() {
   try {
-    const [healthRes, systemRes, modulesRes] = await Promise.all([
-      fetch('/api/health'),
-      fetch('/api/system'),
-      fetch('/api/modules')
-    ]);
-    const health = await healthRes.json();
-    const system = await systemRes.json();
-    const modules = await modulesRes.json();
-
-    document.getElementById('health').textContent = health.status === 'ok' ? 'Система активна' : 'Ошибка';
-    document.getElementById('version').textContent = system.version;
-    document.getElementById('dbcheck').textContent = system.database_check;
-    document.getElementById('dbpath').textContent = system.database;
-    document.getElementById('moduleCount').textContent = system.module_count;
-
-    const root = document.getElementById('modules');
-    root.innerHTML = '';
-    for (const module of modules.modules) {
-      const row = document.createElement('div');
-      row.className = 'module';
-      row.innerHTML = '<div><strong>' + module.name + '</strong><div>' + module.id + ' · v' + module.version + '</div></div><span class="pill">' + module.status + '</span>';
-      root.appendChild(row);
+    const response = await fetch('/api/update/status', {cache: 'no-store'});
+    if (!response.ok) throw new Error('status ' + response.status);
+    const state = await response.json();
+    document.getElementById('updateConnection').textContent = 'Ядро доступно';
+    connectionLostDuringApply = false;
+    renderUpdate(state);
+  } catch (error) {
+    const applying = updateState && ['prepared','waiting_for_shutdown','backing_up','applying','verifying','rolling_back','restarting'].includes(updateState.phase);
+    if (applying || connectionLostDuringApply) {
+      connectionLostDuringApply = true;
+      document.getElementById('updateConnection').textContent = 'Ожидаю перезапуск…';
+      document.getElementById('updateMessage').textContent = 'Sayuri временно недоступна: helper применяет или проверяет обновление.';
+    } else {
+      document.getElementById('updateConnection').textContent = 'Нет связи с ядром';
     }
+  }
+}
+
+async function checkUpdate() {
+  try {
+    const response = await postControl('/api/update/check');
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Проверка не запущена.');
+    renderUpdate(payload.update);
+  } catch (error) {
+    document.getElementById('updateMessage').textContent = error.message;
+    document.getElementById('updateMessage').className = 'message danger';
+  }
+}
+
+async function applyUpdate() {
+  if (!updateState || !updateState.can_apply) return;
+  const target = updateState.available_version || updateState.target_sha || 'новую версию';
+  if (!confirm('Установить ' + target + '? Sayuri будет мягко перезапущена.')) return;
+  try {
+    const response = await postControl('/api/update/apply');
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Обновление не запущено.');
+    connectionLostDuringApply = true;
+    renderUpdate(payload.update);
+  } catch (error) {
+    document.getElementById('updateMessage').textContent = error.message;
+    document.getElementById('updateMessage').className = 'message danger';
+  }
+}
+
+async function refreshHealth() {
+  try {
+    const response = await fetch('/api/health', {cache: 'no-store'});
+    const health = await response.json();
+    document.getElementById('health').textContent = health.status === 'ok' ? 'Система активна' : 'Система требует внимания';
+    document.getElementById('version').textContent = health.version || '—';
+    document.getElementById('coreVersion').textContent = health.core_version || '—';
+    document.getElementById('cognitiveVersion').textContent = health.cognitive_version || '—';
   } catch (error) {
     document.getElementById('health').textContent = 'Нет связи с ядром';
   }
 }
-load();
-setInterval(load, 5000);
+
+async function loadModules() {
+  try {
+    const response = await fetch('/api/modules', {cache: 'no-store'});
+    const payload = await response.json();
+    const root = document.getElementById('modules');
+    root.innerHTML = '';
+    for (const module of payload.modules || []) {
+      const row = document.createElement('div');
+      row.className = 'module';
+      const info = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = module.name;
+      const details = document.createElement('div');
+      details.textContent = module.id + ' · v' + module.version;
+      info.appendChild(strong);
+      info.appendChild(details);
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.textContent = module.status;
+      row.appendChild(info);
+      row.appendChild(pill);
+      root.appendChild(row);
+    }
+  } catch (error) {
+    document.getElementById('modules').textContent = 'Не удалось загрузить реестр.';
+  }
+}
+
+document.getElementById('nav-overview').addEventListener('click', () => setView('overview'));
+document.getElementById('nav-updates').addEventListener('click', () => setView('updates'));
+document.getElementById('checkUpdate').addEventListener('click', checkUpdate);
+document.getElementById('applyUpdate').addEventListener('click', applyUpdate);
+
+const initialView = location.hash === '#updates' ? 'updates' : 'overview';
+setView(initialView);
+refreshHealth();
+loadModules();
+refreshUpdate();
+setInterval(refreshHealth, 5000);
+setInterval(refreshUpdate, 2000);
 </script>
 </body>
 </html>

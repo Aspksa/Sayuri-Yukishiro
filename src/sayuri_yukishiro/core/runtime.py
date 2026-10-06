@@ -5,7 +5,7 @@ from threading import RLock
 from typing import Any
 
 from ..database import CoreDatabase
-from ..paths import LOG_DIR, PROJECT_ROOT, project_version
+from ..paths import LOG_DIR, PROJECT_ROOT, UPDATE_DIR, project_version
 from ..version import SYSTEM_CORE_VERSION
 from .api import CoreAPI
 from .checkpoints import CheckpointService
@@ -16,6 +16,7 @@ from .jobs import JobManager
 from .logging_service import LoggingService
 from .recovery import RecoveryService
 from .service import ServiceRegistry
+from .update_service import UpdateService
 
 
 class SystemCore:
@@ -27,6 +28,8 @@ class SystemCore:
         db: CoreDatabase | None = None,
         config_path: Path | None = None,
         log_dir: Path | None = None,
+        update_dir: Path | None = None,
+        port: int = 8765,
     ) -> None:
         self.db = db or CoreDatabase()
         self.db.initialize()
@@ -47,6 +50,13 @@ class SystemCore:
             max_workers=int(self.config.get("core.max_workers", 4)),
             max_history=int(self.config.get("core.job_history_limit", 500)),
         )
+        self.update = UpdateService(
+            self.jobs,
+            self.events,
+            root=PROJECT_ROOT,
+            update_dir=update_dir or UPDATE_DIR,
+            port=port,
+        )
         self.checkpoints = CheckpointService(self.db)
         self.recovery = RecoveryService(
             self.checkpoints,
@@ -59,6 +69,7 @@ class SystemCore:
         self.registry.register(self.logging)
         self.registry.register(self.events)
         self.registry.register(self.jobs)
+        self.registry.register(self.update)
         self.registry.register(self.checkpoints)
         self.registry.register(self.recovery)
 
@@ -101,6 +112,7 @@ class SystemCore:
 
     def status(self, *, deep: bool = False) -> dict[str, Any]:
         health = self.health.snapshot()
+        update_status = self.update.status()
         return {
             "project": "Sayuri Yukishiro",
             "project_version": project_version(),
@@ -109,4 +121,9 @@ class SystemCore:
             "health": health,
             "recoverable_tasks": len(self.recovery.pending()),
             "database_check": self.db.quick_check() if deep else "not_checked",
+            "update": {
+                "phase": update_status.get("phase"),
+                "update_available": update_status.get("update_available"),
+                "available_version": update_status.get("available_version"),
+            },
         }

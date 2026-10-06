@@ -70,6 +70,7 @@ def _check_cores() -> list[Check]:
                 db=db,
                 config_path=root / "system.json",
                 log_dir=root / "logs",
+                update_dir=root / "update",
             )
             core.start()
             system_status = core.status()
@@ -131,7 +132,7 @@ def _check_git() -> Check:
         "git",
         False,
         "warning",
-        "Git not found. Runtime can start, but Git auto-update is unavailable.",
+        "Git not found. Runtime can start, but «Обновления проекта» is unavailable.",
     )
 
 

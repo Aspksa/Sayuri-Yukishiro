@@ -15,7 +15,7 @@ from sayuri_yukishiro.database import CoreDatabase
 from sayuri_yukishiro.paths import PROJECT_ROOT
 from sayuri_yukishiro.server import SayuriHandler, serve
 from sayuri_yukishiro.storage_policy import sqlite_journal_mode
-from sayuri_yukishiro.updater import safe_update
+from sayuri_yukishiro.updater import inspect_update
 from sayuri_yukishiro.version import (
     COGNITIVE_CORE_VERSION,
     SERVER_PRODUCT,
@@ -54,6 +54,7 @@ class StabilityRegressionTests(unittest.TestCase):
                 db=db,
                 config_path=root / "system.json",
                 log_dir=root / "logs",
+                update_dir=root / "update",
             )
             core.start()
             try:
@@ -75,6 +76,7 @@ class StabilityRegressionTests(unittest.TestCase):
                 db=db,
                 config_path=root / "system.json",
                 log_dir=root / "logs",
+                update_dir=root / "update",
             )
             core.start()
             try:
@@ -126,9 +128,8 @@ class StabilityRegressionTests(unittest.TestCase):
                     mode = str(conn.execute("PRAGMA journal_mode").fetchone()[0])
                 self.assertEqual(mode.lower(), "delete")
 
-    def test_updater_follows_current_upstream_not_main(self) -> None:
+    def test_update_inspection_refreshes_tracking_ref_without_merging(self) -> None:
         calls: list[tuple[str, ...]] = []
-        head_reads = 0
 
         def completed(args: tuple[str, ...], stdout: str = "", code: int = 0):
             return subprocess.CompletedProcess(
@@ -138,8 +139,7 @@ class StabilityRegressionTests(unittest.TestCase):
                 stderr="",
             )
 
-        def fake_git(*args: str, timeout: int = 30):
-            nonlocal head_reads
+        def fake_git(*args: str, timeout: int = 30, root: Path = PROJECT_ROOT):
             calls.append(tuple(args))
             key = tuple(args)
             if key == ("rev-parse", "--is-inside-work-tree"):
@@ -158,28 +158,51 @@ class StabilityRegressionTests(unittest.TestCase):
             if key == ("status", "--porcelain"):
                 return completed(key, "")
             if key == ("rev-parse", "HEAD"):
-                head_reads += 1
-                return completed(key, "aaa\n" if head_reads == 1 else "bbb\n")
-            if key == ("fetch", "--quiet", "origin", "release/test"):
+                return completed(key, "aaa\n")
+            if key == (
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/release/test:refs/remotes/origin/release/test",
+            ):
                 return completed(key)
             if key == ("rev-parse", "origin/release/test"):
                 return completed(key, "bbb\n")
+            if key == ("show", "aaa:VERSION"):
+                return completed(key, "0.3.1\n")
+            if key == ("show", "bbb:VERSION"):
+                return completed(key, "0.4.0\n")
             if key == ("merge-base", "--is-ancestor", "aaa", "bbb"):
                 return completed(key)
-            if key == ("merge", "--ff-only", "--quiet", "bbb"):
-                return completed(key)
+            if key == (
+                "log",
+                "--reverse",
+                "--format=%h %s",
+                "aaa..bbb",
+            ):
+                return completed(key, "bbb feature: update service\n")
             raise AssertionError(f"Unexpected git call: {key}")
 
         with (
             patch("sayuri_yukishiro.updater.shutil.which", return_value="git"),
-            patch("sayuri_yukishiro.updater._git", side_effect=fake_git),
+            patch("sayuri_yukishiro.updater.run_git", side_effect=fake_git),
         ):
-            result = safe_update()
+            result = inspect_update(fetch=True)
 
-        self.assertEqual(result.status, "updated")
-        self.assertEqual(result.upstream, "origin/release/test")
-        self.assertIn(("fetch", "--quiet", "origin", "release/test"), calls)
-        self.assertNotIn(("fetch", "--quiet", "origin", "main"), calls)
+        self.assertEqual(result.status, "available")
+        self.assertTrue(result.can_apply)
+        self.assertEqual(result.available_version, "0.4.0")
+        self.assertEqual(result.upstream.upstream_ref, "origin/release/test")
+        self.assertIn(
+            (
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/release/test:refs/remotes/origin/release/test",
+            ),
+            calls,
+        )
+        self.assertFalse(any(call and call[0] == "merge" for call in calls))
 
     def test_version_metadata_has_single_python_source(self) -> None:
         self.assertEqual(SystemCore.CORE_VERSION, SYSTEM_CORE_VERSION)
@@ -206,6 +229,7 @@ class StabilityRegressionTests(unittest.TestCase):
         self.assertNotIn("v0.1.0", launcher)
         self.assertNotIn("$args =", launcher.lower())
         self.assertIn("/api/shutdown", launcher)
+        self.assertIn("Обновления проекта", launcher)
 
 
 if __name__ == "__main__":

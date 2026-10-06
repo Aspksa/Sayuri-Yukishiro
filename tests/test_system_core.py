@@ -15,6 +15,7 @@ class SystemCoreTests(unittest.TestCase):
             db=CoreDatabase(root / "core.db"),
             config_path=root / "system.json",
             log_dir=root / "logs",
+            update_dir=root / "update",
         )
 
     def test_system_core_starts_healthy_and_stops(self) -> None:
@@ -29,6 +30,10 @@ class SystemCoreTests(unittest.TestCase):
                     status["health"]["healthy_count"],
                     status["health"]["service_count"],
                 )
+                service_names = {
+                    item["name"] for item in status["health"]["services"]
+                }
+                self.assertIn("update_service", service_names)
             finally:
                 core.stop()
             self.assertFalse(core.running)
