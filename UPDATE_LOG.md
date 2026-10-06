@@ -278,6 +278,10 @@ next_action: v0.4.0 — Система модулей и их жизненный
 - CHG-0112 / FIX-0035 -> BUG-0035 — health-gate restart/rollback требует точного expected version вместе с status=ok и project identity.
 - CHG-0113 / BUG-0036 — Windows CI обнаружил IndentationError в _backup_databases после добавления production DB filtering.
 - CHG-0114 / FIX-0036 -> BUG-0036 — выравнивание блока destination/SQLite backup исправляется без изменения транзакционной логики.
+- CHG-0115 / BUG-0037 — Windows regression-тест держал new-version-only.db открытой через sqlite3 context manager, который завершает транзакцию, но не закрывает Connection; rollback закономерно получил WinError 32.
+- CHG-0116 / FIX-0037 -> BUG-0037 — тест явно закрывает SQLite connection перед rollback и проверяет удаление БД без искусственного file lock.
+- CHG-0117 / BUG-0038 — restart regression-тест обращался к helper._wait_health после завершения patch-контекста и получал исходный метод вместо mock.
+- CHG-0118 / FIX-0038 -> BUG-0038 — mock _wait_health сохраняется через as wait_health и его вызов проверяется через сохранённый mock.
 
 Проверки:
 
