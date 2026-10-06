@@ -180,11 +180,20 @@ async function ensureControlToken() {
 }
 
 async function postControl(path) {
-  const token = await ensureControlToken();
-  return fetch(path, {
+  let token = await ensureControlToken();
+  let response = await fetch(path, {
     method: 'POST',
     headers: {'X-Sayuri-Control-Token': token}
   });
+  if (response.status === 403) {
+    controlToken = '';
+    token = await ensureControlToken();
+    response = await fetch(path, {
+      method: 'POST',
+      headers: {'X-Sayuri-Control-Token': token}
+    });
+  }
+  return response;
 }
 
 function phaseText(phase) {
@@ -257,8 +266,10 @@ async function refreshUpdate() {
     const response = await fetch('/api/update/status', {cache: 'no-store'});
     if (!response.ok) throw new Error('status ' + response.status);
     const state = await response.json();
+    const reconnectedAfterApply = connectionLostDuringApply;
     document.getElementById('updateConnection').textContent = 'Ядро доступно';
     connectionLostDuringApply = false;
+    if (reconnectedAfterApply) controlToken = '';
     renderUpdate(state);
   } catch (error) {
     const applying = updateState && ['prepared','waiting_for_shutdown','backing_up','applying','verifying','rolling_back','restarting'].includes(updateState.phase);

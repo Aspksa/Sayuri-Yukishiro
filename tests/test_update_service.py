@@ -312,6 +312,8 @@ class UpdateServiceTests(unittest.TestCase):
         self.assertIn("Обновления проекта", html)
         self.assertIn("/api/update/check", html)
         self.assertIn("/api/update/apply", html)
+        self.assertIn("if (response.status === 403)", html)
+        self.assertIn("if (reconnectedAfterApply) controlToken = '';", html)
         self.assertNotIn("safe_update", main_py)
 
 
