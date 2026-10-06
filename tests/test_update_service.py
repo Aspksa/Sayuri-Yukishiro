@@ -195,6 +195,14 @@ class UpdateServiceTests(unittest.TestCase):
                     urllib.request.urlopen(bad_host, timeout=2)
                 self.assertEqual(host_ctx.exception.code, 403)
 
+                bad_health = urllib.request.Request(
+                    f"http://{host}:{port}/api/health",
+                    headers={"Host": "evil.example"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as health_ctx:
+                    urllib.request.urlopen(bad_health, timeout=2)
+                self.assertEqual(health_ctx.exception.code, 403)
+
                 request = urllib.request.Request(
                     f"http://{host}:{port}/api/update/check",
                     method="POST",
@@ -295,6 +303,14 @@ class UpdateServiceTests(unittest.TestCase):
                 conn.commit()
             finally:
                 conn.close()
+
+            extra_db = runtime_data / "new-version-only.db"
+            with sqlite3.connect(extra_db) as conn:
+                conn.execute("CREATE TABLE extra(value TEXT)")
+            Path(str(db_path) + "-journal").write_text(
+                "stale",
+                encoding="utf-8",
+            )
             self.assertTrue((control / "backup.zip").is_file())
             self.assertEqual(
                 (root / "payload.txt").read_text(encoding="utf-8"),
@@ -341,6 +357,8 @@ class UpdateServiceTests(unittest.TestCase):
             finally:
                 conn.close()
             self.assertEqual(value, "old")
+            self.assertFalse(extra_db.exists())
+            self.assertFalse(Path(str(db_path) + "-journal").exists())
 
     def test_helper_refuses_destructive_rollback_if_worktree_changed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -439,7 +457,7 @@ class UpdateServiceTests(unittest.TestCase):
             )
             try:
                 with patch(
-                    "sayuri_yukishiro.core.update_service._process_alive",
+                    "sayuri_yukishiro.core.update_service.process_alive",
                     return_value=False,
                 ):
                     service.start()
@@ -478,6 +496,8 @@ class UpdateServiceTests(unittest.TestCase):
                         "shutdown_token": "shutdown-secret",
                         "before_sha": "a" * 40,
                         "target_sha": "b" * 40,
+                        "current_version": "0.3.1",
+                        "available_version": "0.4.0",
                     }
                 ),
                 encoding="utf-8",
@@ -497,6 +517,10 @@ class UpdateServiceTests(unittest.TestCase):
                 with self.assertRaises(TimeoutError):
                     helper.restart()
             terminate.assert_called_once_with(process)
+            helper._wait_health.assert_called_once_with(
+                process,
+                expected_version="0.4.0",
+            )
 
     def test_verification_uses_isolated_runtime_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

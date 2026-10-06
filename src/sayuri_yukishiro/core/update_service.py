@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ctypes
 import json
 import os
 import subprocess
@@ -12,6 +11,7 @@ from threading import RLock
 from typing import Any
 
 from ..paths import DATA_DIR, PROJECT_ROOT, UPDATE_DIR, project_version
+from ..process_utils import process_alive
 from ..update_state import (
     append_update_log,
     load_update_state,
@@ -34,29 +34,6 @@ _BUSY_PHASES = {
     "rolling_back",
     "restarting",
 }
-
-
-def _process_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    if os.name == "nt":
-        try:
-            handle = ctypes.windll.kernel32.OpenProcess(
-                0x1000,
-                False,
-                pid,
-            )
-        except Exception:
-            return False
-        if not handle:
-            return False
-        ctypes.windll.kernel32.CloseHandle(handle)
-        return True
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
 
 
 class UpdateService(ManagedService):
@@ -91,7 +68,7 @@ class UpdateService(ManagedService):
         phase = str(state.get("phase") or "idle")
         if phase in _BUSY_PHASES:
             helper_pid = int(state.get("helper_pid") or 0)
-            if helper_pid > 0 and _process_alive(helper_pid):
+            if helper_pid > 0 and process_alive(helper_pid):
                 state["message"] = (
                     "Внешний update-helper продолжает операцию; "
                     "новая проверка временно заблокирована."

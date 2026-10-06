@@ -100,6 +100,10 @@ class SayuriHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self) -> None:
+        if not self._local_shell_allowed():
+            self._json({"status": "forbidden"}, HTTPStatus.FORBIDDEN)
+            return
+
         path = urlparse(self.path).path
         core = self.app_server.core
         cognitive = self.app_server.cognitive
@@ -190,6 +194,10 @@ class SayuriHandler(BaseHTTPRequestHandler):
         self._serve_file(relative)
 
     def do_POST(self) -> None:
+        if not self._local_shell_allowed():
+            self._json({"status": "forbidden"}, HTTPStatus.FORBIDDEN)
+            return
+
         path = urlparse(self.path).path
         core = self.app_server.core
 
