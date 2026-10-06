@@ -102,3 +102,50 @@ v0.1.1 will introduce Module Runtime & Lifecycle:
 - controlled startup/shutdown;
 - API routing;
 - module version compatibility.
+
+
+## 9. Системное ядро v0.2.0
+
+Системное ядро управляет конфигурацией, журналированием, событиями, фоновыми задачами, контрольными точками и восстановлением.
+
+Оно не содержит логику мышления Sayuri.
+
+## 10. Когнитивное ядро v0.3.0
+
+Когнитивное ядро размещается над System Core и использует только его ограниченный CoreAPI и долговечную базу состояния.
+
+```text
+Пользователь / будущий чат
+          |
+          v
+   Cognitive Core
+          |
+          +--> Context
+          +--> Intent
+          +--> Goal
+          +--> Planner
+          +--> Capability Registry
+          +--> Execution Gate
+          +--> Evidence / Receipts
+          +--> Verification
+          +--> Confidence / Contradictions
+          +--> ReasoningProvider interface
+          |
+          v
+      CoreAPI
+          |
+          v
+     System Core
+          |
+          +--> Event Bus
+          +--> Jobs
+          +--> Checkpoints
+          +--> Recovery
+          +--> SQLite
+```
+
+Когнитивный слой не выполняет мутации напрямую. Любые MUTATION/EXTERNAL capabilities блокируются до появления Action Broker.
+
+## 11. Следующий архитектурный слой
+
+После когнитивного ядра следующим инфраструктурным этапом остаётся система модулей: manifests, discovery, dependency graph, permissions, migrations, health и controlled lifecycle. После неё когнитивное ядро сможет выбирать реальные модульные способности вместо только встроенных безопасных когнитивных операций.

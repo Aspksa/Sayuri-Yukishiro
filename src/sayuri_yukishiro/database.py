@@ -121,6 +121,7 @@ class CoreDatabase:
                 (utc_now(),),
             )
             self._apply_system_core_schema(conn)
+            self._apply_cognitive_schema(conn)
 
             now = utc_now()
             conn.execute(
@@ -175,6 +176,44 @@ class CoreDatabase:
         )
         conn.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(2, ?)",
+            (utc_now(),),
+        )
+
+
+    def _apply_cognitive_schema(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS cognitive_sessions (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                intent TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                state_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_cognitive_sessions_status
+                ON cognitive_sessions(status, updated_at);
+
+            CREATE TABLE IF NOT EXISTS cognitive_receipts (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                step_id TEXT NOT NULL,
+                capability TEXT NOT NULL,
+                status TEXT NOT NULL,
+                evidence_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES cognitive_sessions(id)
+                    ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_cognitive_receipts_session
+                ON cognitive_receipts(session_id, created_at);
+            """
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?)",
             (utc_now(),),
         )
 
@@ -344,6 +383,110 @@ class CoreDatabase:
             for row in rows:
                 item = dict(row)
                 item["payload"] = json.loads(item.pop("payload_json"))
+                result.append(item)
+            return result
+
+
+
+    def save_cognitive_session(self, state: dict[str, Any]) -> None:
+        now = utc_now()
+        session_id = str(state["id"])
+        intent = str(dict(state.get("intent", {})).get("kind", "unknown"))
+        status = str(state.get("status", "in_progress"))
+        confidence = float(state.get("confidence", 0.0))
+        with self.session() as conn:
+            conn.execute(
+                """
+                INSERT INTO cognitive_sessions(
+                    id, status, intent, confidence, state_json, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status=excluded.status,
+                    intent=excluded.intent,
+                    confidence=excluded.confidence,
+                    state_json=excluded.state_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    session_id,
+                    status,
+                    intent,
+                    confidence,
+                    _json_text(state),
+                    now,
+                    now,
+                ),
+            )
+
+    def get_cognitive_session(self, session_id: str) -> dict[str, Any] | None:
+        with self.session() as conn:
+            row = conn.execute(
+                "SELECT state_json FROM cognitive_sessions WHERE id=?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return dict(json.loads(str(row["state_json"])))
+
+    def list_cognitive_sessions(self, limit: int = 50) -> list[dict[str, Any]]:
+        safe_limit = max(1, min(200, int(limit)))
+        with self.session() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, status, intent, confidence, created_at, updated_at
+                FROM cognitive_sessions
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def count_cognitive_sessions(self) -> int:
+        with self.session() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS count FROM cognitive_sessions"
+            ).fetchone()
+            return int(row["count"]) if row is not None else 0
+
+    def append_cognitive_receipt(self, receipt: dict[str, Any]) -> None:
+        with self.session() as conn:
+            conn.execute(
+                """
+                INSERT INTO cognitive_receipts(
+                    id, session_id, step_id, capability, status,
+                    evidence_json, created_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(receipt["id"]),
+                    str(receipt["session_id"]),
+                    str(receipt["step_id"]),
+                    str(receipt["capability"]),
+                    str(receipt["status"]),
+                    _json_text(receipt.get("evidence", {})),
+                    str(receipt["created_at"]),
+                ),
+            )
+
+    def list_cognitive_receipts(self, session_id: str) -> list[dict[str, Any]]:
+        with self.session() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, session_id, step_id, capability, status,
+                       evidence_json, created_at
+                FROM cognitive_receipts
+                WHERE session_id=?
+                ORDER BY created_at, id
+                """,
+                (session_id,),
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                item["evidence"] = json.loads(item.pop("evidence_json"))
                 result.append(item)
             return result
 

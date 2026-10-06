@@ -7,6 +7,7 @@ import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .cognitive.engine import CognitiveCore
 from .core.runtime import SystemCore
 from .database import CoreDatabase
 from .paths import DATA_DIR, PROJECT_ROOT, ensure_runtime_dirs
@@ -60,7 +61,7 @@ def _check_database() -> Check:
         return Check("database", False, "fatal", f"SQLite initialization failed: {exc}")
 
 
-def _check_system_core() -> Check:
+def _check_cores() -> list[Check]:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -71,21 +72,55 @@ def _check_system_core() -> Check:
                 log_dir=root / "logs",
             )
             core.start()
-            status = core.status()
+            system_status = core.status()
+
+            cognitive = CognitiveCore(core.api, db)
+            cognitive.start()
+            session = cognitive.create_session(
+                "Проверь состояние когнитивного ядра",
+                context={"project": "diagnostics"},
+            )
+            completed = cognitive.run_safe(session.id)
+            cognitive_status = cognitive.status()
+            receipt_count = len(cognitive.receipts(session.id))
+            cognitive.stop()
             core.stop()
-        healthy = status["health"]["overall"] == "healthy"
-        return Check(
-            "system_core",
-            healthy,
-            "fatal" if not healthy else "info",
-            (
-                f"Core {status['core_version']}; "
-                f"services={status['health']['healthy_count']}/"
-                f"{status['health']['service_count']}"
-            ),
+
+        system_healthy = system_status["health"]["overall"] == "healthy"
+        cognitive_healthy = (
+            cognitive_status["running"]
+            and completed.status == "completed"
+            and completed.verification.complete
+            and receipt_count == len(completed.plan.steps)
         )
+        return [
+            Check(
+                "system_core",
+                system_healthy,
+                "fatal" if not system_healthy else "info",
+                (
+                    f"Core {system_status['core_version']}; "
+                    f"services={system_status['health']['healthy_count']}/"
+                    f"{system_status['health']['service_count']}"
+                ),
+            ),
+            Check(
+                "cognitive_core",
+                cognitive_healthy,
+                "fatal" if not cognitive_healthy else "info",
+                (
+                    f"Cognitive {cognitive_status['version']}; "
+                    f"provider={cognitive_status['provider']}; "
+                    f"receipts={receipt_count}"
+                ),
+            ),
+        ]
     except Exception as exc:
-        return Check("system_core", False, "fatal", f"System core failed: {exc}")
+        detail = f"Core diagnostics failed: {exc}"
+        return [
+            Check("system_core", False, "fatal", detail),
+            Check("cognitive_core", False, "fatal", detail),
+        ]
 
 
 def _check_git() -> Check:
@@ -115,12 +150,13 @@ def _check_port(port: int) -> Check:
 
 
 def run_diagnostics(port: int = 8765) -> list[Check]:
+    core_checks = _check_cores()
     return [
         Check("project_root", True, "info", str(PROJECT_ROOT)),
         _check_python(),
         _check_paths(),
         _check_database(),
-        _check_system_core(),
+        *core_checks,
         _check_git(),
         _check_port(port),
     ]

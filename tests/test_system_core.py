@@ -21,14 +21,16 @@ class SystemCoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             core = self.make_core(Path(tmp))
             core.start()
-            status = core.status()
-            self.assertTrue(status["running"])
-            self.assertEqual(status["health"]["overall"], "healthy")
-            self.assertEqual(
-                status["health"]["healthy_count"],
-                status["health"]["service_count"],
-            )
-            core.stop()
+            try:
+                status = core.status()
+                self.assertTrue(status["running"])
+                self.assertEqual(status["health"]["overall"], "healthy")
+                self.assertEqual(
+                    status["health"]["healthy_count"],
+                    status["health"]["service_count"],
+                )
+            finally:
+                core.stop()
             self.assertFalse(core.running)
 
     def test_event_bus_delivers_event(self) -> None:
@@ -37,44 +39,52 @@ class SystemCoreTests(unittest.TestCase):
             db.initialize()
             bus = EventBus(db)
             bus.start()
-            received: list[str] = []
-            bus.subscribe("demo.event", lambda event: received.append(event.id))
-            event = bus.publish("demo.event", {"value": 1})
-            self.assertEqual(received, [event.id])
-            bus.stop()
+            try:
+                received: list[str] = []
+                bus.subscribe("demo.event", lambda event: received.append(event.id))
+                event = bus.publish("demo.event", {"value": 1})
+                self.assertEqual(received, [event.id])
+            finally:
+                bus.stop()
 
     def test_job_manager_executes_background_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             core = self.make_core(Path(tmp))
             core.start()
-            job_id = core.api.submit_job("sum", lambda a, b: a + b, 2, 3)
-            self.assertEqual(core.jobs.wait(job_id, timeout=5), 5)
-            self.assertEqual(core.jobs.get(job_id)["status"], "completed")
-            core.stop()
+            try:
+                job_id = core.api.submit_job("sum", lambda a, b: a + b, 2, 3)
+                self.assertEqual(core.jobs.wait(job_id, timeout=5), 5)
+                self.assertEqual(core.jobs.get(job_id)["status"], "completed")
+            finally:
+                core.stop()
 
     def test_checkpoint_is_recovered_after_restart(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             core = self.make_core(root)
             core.start()
-            core.api.save_checkpoint(
-                "task-001",
-                {"step": 2},
-                "continue from step 3",
-            )
-            core.stop()
+            try:
+                core.api.save_checkpoint(
+                    "task-001",
+                    {"step": 2},
+                    "continue from step 3",
+                )
+            finally:
+                core.stop()
 
             restored = self.make_core(root)
             restored.start()
-            tasks = restored.api.recoverable_tasks()
-            self.assertEqual(len(tasks), 1)
-            self.assertEqual(tasks[0]["task_id"], "task-001")
-            self.assertEqual(tasks[0]["next_action"], "continue from step 3")
-            restored.api.complete_checkpoint("task-001")
-            self.assertEqual(restored.api.recoverable_tasks(), [])
-            restored.stop()
+            try:
+                tasks = restored.api.recoverable_tasks()
+                self.assertEqual(len(tasks), 1)
+                self.assertEqual(tasks[0]["task_id"], "task-001")
+                self.assertEqual(tasks[0]["next_action"], "continue from step 3")
+                restored.api.complete_checkpoint("task-001")
+                self.assertEqual(restored.api.recoverable_tasks(), [])
+            finally:
+                restored.stop()
 
-    def test_database_schema_tracks_system_core_migration(self) -> None:
+    def test_database_schema_tracks_cognitive_migration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = CoreDatabase(Path(tmp) / "schema.db")
             db.initialize()
@@ -85,7 +95,7 @@ class SystemCoreTests(unittest.TestCase):
                         "SELECT version FROM schema_migrations ORDER BY version"
                     ).fetchall()
                 ]
-            self.assertEqual(versions, [1, 2])
+            self.assertEqual(versions, [1, 2, 3])
 
 
 if __name__ == "__main__":

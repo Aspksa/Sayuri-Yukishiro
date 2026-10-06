@@ -7,6 +7,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+from .cognitive.engine import CognitiveCore
 from .core.runtime import SystemCore
 from .paths import WEB_DIR, project_version
 
@@ -15,13 +16,19 @@ class SayuriHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, server_address: tuple[str, int], core: SystemCore):
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        core: SystemCore,
+        cognitive: CognitiveCore,
+    ):
         self.core = core
+        self.cognitive = cognitive
         super().__init__(server_address, SayuriHandler)
 
 
 class SayuriHandler(BaseHTTPRequestHandler):
-    server_version = "SayuriYukishiro/0.2.0"
+    server_version = "SayuriYukishiro/0.3.0"
 
     @property
     def app_server(self) -> SayuriHTTPServer:
@@ -60,16 +67,20 @@ class SayuriHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         core = self.app_server.core
+        cognitive = self.app_server.cognitive
 
         if path == "/api/health":
             status = core.status()
             overall = status["health"]["overall"]
+            cognitive_status = cognitive.status()
+            healthy = overall == "healthy" and cognitive_status["running"]
             self._json(
                 {
-                    "status": "ok" if overall == "healthy" else overall,
+                    "status": "ok" if healthy else "degraded",
                     "project": "Sayuri Yukishiro",
                     "version": project_version(),
                     "core_version": status["core_version"],
+                    "cognitive_version": cognitive_status["version"],
                     "pid": os.getpid(),
                 }
             )
@@ -87,18 +98,30 @@ class SayuriHandler(BaseHTTPRequestHandler):
             self._json({"jobs": core.jobs.snapshot()})
             return
 
+        if path == "/api/cognitive":
+            self._json(cognitive.status())
+            return
+
+        if path == "/api/cognitive/sessions":
+            self._json({"sessions": cognitive.list_sessions()})
+            return
+
         if path == "/api/modules":
             self._json({"modules": core.db.list_modules()})
             return
 
         if path == "/api/system":
             core_status = core.status()
+            cognitive_status = cognitive.status()
             self._json(
                 {
                     "project": "Sayuri Yukishiro",
                     "version": project_version(),
                     "core_version": core_status["core_version"],
                     "core_health": core_status["health"]["overall"],
+                    "cognitive_version": cognitive_status["version"],
+                    "cognitive_running": cognitive_status["running"],
+                    "cognitive_sessions": cognitive_status["sessions"],
                     "database": str(core.db.path),
                     "database_check": core_status["database_check"],
                     "module_count": len(core.db.list_modules()),
@@ -117,13 +140,16 @@ class SayuriHandler(BaseHTTPRequestHandler):
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     core = SystemCore()
     core.start()
-    server = SayuriHTTPServer((host, port), core)
+    cognitive = CognitiveCore(core.api, core.db)
+    cognitive.start()
+    server = SayuriHTTPServer((host, port), core, cognitive)
     print(
-        f"Sayuri Yukishiro {project_version()} / core {core.CORE_VERSION} "
-        f"listening on http://{host}:{port}"
+        f"Sayuri Yukishiro {project_version()} / system core {core.CORE_VERSION} / "
+        f"cognitive core {cognitive.VERSION} listening on http://{host}:{port}"
     )
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
         server.server_close()
+        cognitive.stop()
         core.stop()
