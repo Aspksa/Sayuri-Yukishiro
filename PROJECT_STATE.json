@@ -2,11 +2,11 @@
   "schema_version": 2,
   "project": "Sayuri Yukishiro",
   "repository": "Aspksa/Sayuri-Yukishiro",
-  "version": "0.2.0",
-  "development_version": "0.3.0",
+  "version": "0.3.0",
+  "development_version": "0.4.0",
   "core_version": "0.2.0",
   "stage": "cognitive-core",
-  "status": "in_progress",
+  "status": "completed",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -41,7 +41,7 @@
     "no_update_over_local_changes": true,
     "bind_localhost_only": true
   },
-  "next_action": "v0.3.0 Cognitive Core: implement context, intent, goals, planning, capability safety boundary, receipts, verification, confidence, recovery integration, provider interface, and cognitive persistence.",
+  "next_action": "v0.4.0 Module Runtime & Lifecycle: add manifests, discovery, dependency graph, permissions, migrations, health checks, controlled startup/shutdown, and capability registration into the Cognitive Core.",
   "system_core": {
     "version": "0.2.0",
     "services": [
@@ -56,5 +56,37 @@
     "api": "CoreAPI",
     "recovery_policy": "restore context and next_action without automatic replay of arbitrary actions"
   },
-  "cognitive_core_development_version": "0.3.0"
+  "cognitive_core_version": "0.3.0",
+  "cognitive_core": {
+    "version": "0.3.0",
+    "layers": [
+      "context",
+      "intent",
+      "goals",
+      "planner",
+      "capability_registry",
+      "execution_gate",
+      "evidence",
+      "verification",
+      "assessment",
+      "provider_interface"
+    ],
+    "provider_interface": "ReasoningProvider",
+    "default_provider": "NullReasoningProvider",
+    "database_schema": 3,
+    "persistence": [
+      "cognitive_sessions",
+      "cognitive_receipts"
+    ],
+    "safety_boundary": {
+      "read_only": "allowed",
+      "mutation": "requires_action_broker",
+      "external": "requires_action_broker"
+    },
+    "recovery": "system-core checkpoints with exact next_action",
+    "api": [
+      "/api/cognitive",
+      "/api/cognitive/sessions"
+    ]
+  }
 }

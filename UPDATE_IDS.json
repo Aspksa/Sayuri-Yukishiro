@@ -17,41 +17,8 @@
     "ARCH": "ARCH-0007"
   },
   "active_development": {
-    "version": "v0.3.0",
-    "status": "in_progress",
-    "reserved": [
-      "CHG-0031",
-      "ARCH-0005",
-      "CHG-0032",
-      "FEAT-0015",
-      "CHG-0033",
-      "FEAT-0016",
-      "CHG-0034",
-      "FEAT-0017",
-      "CHG-0035",
-      "FEAT-0018",
-      "CHG-0036",
-      "FEAT-0019",
-      "CHG-0037",
-      "FEAT-0020",
-      "CHG-0038",
-      "FEAT-0021",
-      "CHG-0039",
-      "FEAT-0022",
-      "CHG-0040",
-      "FEAT-0023",
-      "CHG-0041",
-      "FEAT-0024",
-      "CHG-0042",
-      "FEAT-0025",
-      "CHG-0043",
-      "ARCH-0006",
-      "CHG-0044",
-      "IMP-0003",
-      "CHG-0045",
-      "BUG-0006",
-      "CHG-0046",
-      "FIX-0006"
-    ]
+    "version": "v0.4.0",
+    "status": "planned",
+    "reserved": []
   }
 }
