@@ -11,10 +11,10 @@ LOG_PATH = ROOT / "UPDATE_LOG.md"
 STATE_PATH = ROOT / "PROJECT_STATE.json"
 VERSION_PATH = ROOT / "VERSION"
 
-ID_PATTERN = re.compile(r"\\b(CHG|FEAT|BUG|FIX|IMP|ARCH)-(\\d{4})\\b")
-FIX_PATTERN = re.compile(r"\\b(FIX-\\d{4})\\s*->\\s*(BUG-\\d{4})\\b")
-VERSION_HEADING = re.compile(r"^##\\s+v(\\d+\\.\\d+\\.\\d+)\\s*$", re.MULTILINE)
-STATUS_PATTERN = re.compile(r"^Статус:\\s*(\\S+)\\s*$", re.MULTILINE)
+ID_PATTERN = re.compile(r"\b(CHG|FEAT|BUG|FIX|IMP|ARCH)-(\d{4})\b")
+FIX_PATTERN = re.compile(r"\b(FIX-\d{4})\s*->\s*(BUG-\d{4})\b")
+VERSION_HEADING = re.compile(r"^##\s+v(\d+\.\d+\.\d+)\s*$", re.MULTILINE)
+STATUS_PATTERN = re.compile(r"^Статус:\s*(\S+)\s*$", re.MULTILINE)
 
 
 def fail(message: str) -> None:
@@ -54,7 +54,7 @@ def main() -> int:
         if ids["next"].get(prefix) != expected_next:
             fail(f"Next ID mismatch for {prefix}: expected {expected_next}")
 
-    sections = re.split(r"(?=^##\\s+v\\d+\\.\\d+\\.\\d+\\s*$)", log, flags=re.MULTILINE)
+    sections = re.split(r"(?=^##\s+v\d+\.\d+\.\d+\s*$)", log, flags=re.MULTILINE)
     completed_versions: list[str] = []
     in_progress_versions: list[str] = []
 
