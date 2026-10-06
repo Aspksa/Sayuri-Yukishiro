@@ -1,47 +1,39 @@
 # Sayuri Yukishiro
 
-**Project version:** 0.1.0  
-**Core foundation:** 0.1.0
+Current release: v0.1.0
+Development target: v0.1.1
+Core foundation: v0.1.0
 
-Sayuri Yukishiro is a modular personal AI platform. Version 0.1.0 establishes the portable Windows runtime, core database layer, diagnostics, local web shell, tray launcher, and safe GitHub update path.
+Sayuri Yukishiro is a modular personal AI platform.
+
+## Mandatory update protocol
+
+Every change is governed by AGENTS.md, docs/UPDATE_PROTOCOL.md, UPDATE_IDS.json, UPDATE_LOG.md and PROJECT_STATE.json.
+
+Required sequence:
+
+task -> ID -> change -> check -> version -> journal -> commit -> next_action
+
+CI validates the protocol with:
+
+python scripts/validate_update_protocol.py
 
 ## Launch
 
-Run:
+Run Sayuri-Yukishiro.bat.
 
-```text
-Sayuri-Yukishiro.bat
-```
-
-The launcher:
-
-1. Resolves the project directory dynamically, so no fixed drive letter is required.
-2. Finds Python in `runtime\python`, `.venv`, PATH, or the Windows `py` launcher.
-3. Checks for a safe Git fast-forward update from `origin/main`.
-4. Runs diagnostics and initializes SQLite.
-5. Starts the local core at `http://127.0.0.1:8765`.
-6. Opens the site in the default browser.
-7. Keeps Sayuri in the Windows notification area (system tray) with Open, Diagnostics, Restart, and Exit actions.
+The launcher resolves the project directory dynamically, finds Python, checks for safe fast-forward updates, runs diagnostics, starts the local core at http://127.0.0.1:8765, opens the site and remains available in the Windows notification area.
 
 ## Storage model
 
-- `data/core/sayuri_yukishiro.db` — central core registry.
-- `data/modules/<module_id>.db` — isolated storage owned by each module.
-- `data/logs/` — runtime logs.
-- `data/cache/` — disposable cache.
-
-The core registry contains module metadata, settings, events, jobs, audit records, and schema migration state.
+- data/core/sayuri_yukishiro.db — central core registry.
+- data/modules/<module_id>.db — isolated storage owned by each module.
+- data/logs/ — runtime logs.
+- data/cache/ — disposable cache.
 
 ## Update safety
 
-Automatic update is intentionally conservative:
-
-- only a Git working copy is updated;
-- local changes stop automatic update;
-- only fast-forward updates from `origin/main` are accepted;
-- divergent history is never overwritten automatically.
-
-Portable release-package updating can be added later without weakening this safety model.
+Automatic Git updates are conservative: local changes block automatic update, only origin/main is fetched, only fast-forward is accepted and divergent history is never overwritten automatically.
 
 ## Current foundation
 
@@ -55,11 +47,8 @@ Portable release-package updating can be added later without weakening this safe
 - Audit/event/job primitives
 - Safe Git update check
 - Machine-readable project state
+- Mandatory version/change/bug/fix/feature/improvement/architecture IDs
 
-See `PROJECT_STATE.json` and `docs/ARCHITECTURE.md`.
+## Next release after governance
 
-## Next release
-
-**v0.1.1 — Module Runtime & Lifecycle**
-
-Manifests, module discovery, dependency checks, permissions, module migrations, health state, startup/shutdown lifecycle, and isolated module APIs.
+After v0.1.1 is finalized, the next functional release is v0.2.0 — Module Runtime & Lifecycle, because the mandatory versioning policy classifies new functionality as a MINOR release.

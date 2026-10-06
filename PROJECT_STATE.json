@@ -1,11 +1,12 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "project": "Sayuri Yukishiro",
   "repository": "Aspksa/Sayuri-Yukishiro",
   "version": "0.1.0",
+  "development_version": "0.1.1",
   "core_version": "0.1.0",
-  "stage": "foundation-bootstrap",
-  "status": "implemented",
+  "stage": "update-governance",
+  "status": "in_progress",
   "platform": {
     "primary": "Windows",
     "portable_paths": true,
@@ -20,6 +21,15 @@
     "module_databases": "data/modules/<module_id>.db",
     "auto_update": "git fetch + fast-forward only when worktree is clean"
   },
+  "update_protocol": {
+    "required": true,
+    "protocol": "docs/UPDATE_PROTOCOL.md",
+    "journal": "UPDATE_LOG.md",
+    "id_registry": "UPDATE_IDS.json",
+    "agent_entrypoint": "AGENTS.md",
+    "validator": "scripts/validate_update_protocol.py",
+    "sequence": "task -> ID -> change -> check -> version -> journal -> commit -> next_action"
+  },
   "versioning_policy": {
     "project_version": "SemVer",
     "rule": "Every released project change increments the project version.",
@@ -31,5 +41,5 @@
     "no_update_over_local_changes": true,
     "bind_localhost_only": true
   },
-  "next_action": "v0.1.1 Module Runtime & Lifecycle: add manifests, discovery, permissions, migrations, dependency validation, module health, and controlled startup/shutdown."
+  "next_action": "Complete CI for v0.1.1 update protocol, finalize the journal, then start v0.2.0 Module Runtime & Lifecycle."
 }

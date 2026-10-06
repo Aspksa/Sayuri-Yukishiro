@@ -2,7 +2,6 @@ name: Foundation Smoke
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -22,9 +21,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Validate update protocol
+        shell: pwsh
+        run: python scripts/validate_update_protocol.py
+
       - name: Compile Python
         shell: pwsh
-        run: python -m compileall -q src
+        run: python -m compileall -q src scripts tests
 
       - name: Unit smoke tests
         shell: pwsh
@@ -44,7 +47,7 @@ jobs:
           $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path "scripts\launcher.ps1"),
+            (Resolve-Path "scripts\\launcher.ps1"),
             [ref]$tokens,
             [ref]$errors
           ) | Out-Null
