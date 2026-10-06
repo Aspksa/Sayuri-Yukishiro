@@ -94,16 +94,15 @@ function Run-Preflight {
         $args += "--no-update"
     }
     Invoke-Sayuri -Arguments $args
-    return $script:SayuriExitCode
 }
 
 if ($PreflightOnly) {
-    Run-Preflight | Out-Null
+    Run-Preflight
     exit $script:SayuriExitCode
 }
 
 if (-not $SkipPreflight) {
-    Run-Preflight | Out-Null
+    Run-Preflight
     if ($script:SayuriExitCode -ne 0) {
         exit $script:SayuriExitCode
     }
